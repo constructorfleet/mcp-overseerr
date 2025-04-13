@@ -129,3 +129,8 @@ You can also watch the server logs with this command:
 
 ```bash
 tail -n 20 -f ~/Library/Logs/Claude/mcp-server-overseerr-mcp.log
+```
+
+## License
+
+MIT

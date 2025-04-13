@@ -1,9 +1,22 @@
 [project]
 name = "overseerr-mcp"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.1.1"
+description = "MCP server for interacting with Overseerr media request management system"
 readme = "README.md"
 requires-python = ">=3.12"
+authors = [
+    {name = "Jerico Arciaga", email = "arciagajerico@gmail.com"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Utilities"
+]
 dependencies = [
     "httpx>=0.28.1",
     "mcp[cli]>=1.6.0",
@@ -13,3 +26,11 @@ dependencies = [
 
 [project.scripts]
 overseerr-mcp = "overseerr_mcp:main"
+
+[project.urls]
+"Homepage" = "https://github.com/jgarciaga/overseerr-mcp"
+"Bug Tracker" = "https://github.com/jgarciaga/overseerr-mcp/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
