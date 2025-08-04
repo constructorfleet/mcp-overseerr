@@ -37,7 +37,7 @@ class ToolHandler():
     def get_tool_description(self) -> Tool:
         raise NotImplementedError()
 
-    def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
+    async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
         raise NotImplementedError()
 
 class StatusToolHandler(ToolHandler):
@@ -55,10 +55,10 @@ class StatusToolHandler(ToolHandler):
             },
         )
 
-    def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
-        # Create synchronous client
+    async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
+        # Create asynchronous client
         client = overseerr.Overseerr(api_key=api_key, url=url)
-        data = client.get_status()
+        data = await client.get_status()
 
         if "version" in data:
             status_response = f"\n---\nOverseerr is available and these are the status data:\n"
@@ -98,13 +98,13 @@ class MovieRequestsToolHandler(ToolHandler):
             },
         )
 
-    def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
+    async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
         # Extract arguments
         status = args.get("status")
         start_date = args.get("start_date")
         
-        # Now using synchronous approach
-        results = self.get_movie_requests(status, start_date)
+        # Now using asynchronous approach
+        results = await self.get_movie_requests(status, start_date)
         
         return [
             TextContent(
@@ -113,7 +113,7 @@ class MovieRequestsToolHandler(ToolHandler):
             )
         ]
         
-    def get_movie_requests(self, status=None, start_date=None):
+    async def get_movie_requests(self, status=None, start_date=None):
         client = overseerr.Overseerr(api_key=api_key, url=url)
         
         # Parameter validation
@@ -141,7 +141,7 @@ class MovieRequestsToolHandler(ToolHandler):
                 params["filter"] = status
             
             # Call API
-            response = client.get_requests(params)
+            response = await client.get_requests(params)
             
             # Process results
             results = response.get("results", [])
@@ -157,7 +157,7 @@ class MovieRequestsToolHandler(ToolHandler):
                     
                     # Get movie details to get the title
                     movie_id = media_info.get("tmdbId")
-                    movie_details = client.get_movie_details(movie_id)
+                    movie_details = await client.get_movie_details(movie_id)
                     
                     # Map media availability to string value
                     media_status_code = media_info.get("status", 1)
@@ -205,13 +205,13 @@ class TvRequestsToolHandler(ToolHandler):
             },
         )
 
-    def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
+    async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
         # Extract arguments
         status = args.get("status")
         start_date = args.get("start_date")
         
-        # Now using synchronous approach
-        results = self.get_tv_requests(status, start_date)
+        # Now using asynchronous approach
+        results = await self.get_tv_requests(status, start_date)
         
         return [
             TextContent(
@@ -220,7 +220,7 @@ class TvRequestsToolHandler(ToolHandler):
             )
         ]
         
-    def get_tv_requests(self, status=None, start_date=None):
+    async def get_tv_requests(self, status=None, start_date=None):
         client = overseerr.Overseerr(api_key=api_key, url=url)
         
         # Parameter validation
@@ -248,7 +248,7 @@ class TvRequestsToolHandler(ToolHandler):
                 params["filter"] = status
             
             # Call API
-            response = client.get_requests(params)
+            response = await client.get_requests(params)
             
             # Process results
             results = response.get("results", [])
@@ -264,7 +264,7 @@ class TvRequestsToolHandler(ToolHandler):
                     
                     # Get TV details to get the title and seasons
                     tv_id = media_info.get("tmdbId")
-                    tv_details = client.get_tv_details(tv_id)
+                    tv_details = await client.get_tv_details(tv_id)
                     
                     # Map media availability to string value
                     media_status_code = media_info.get("status", 1)
@@ -285,7 +285,7 @@ class TvRequestsToolHandler(ToolHandler):
                         season_str = f"S{season_number:02d}"
                         
                         # Get detailed season info including episodes
-                        season_details = client.get_season_details(tv_id, season_number)
+                        season_details = await client.get_season_details(tv_id, season_number)
                         
                         # Season availability is assumed to be the same as the show
                         tv_season_availability = tv_title_availability
