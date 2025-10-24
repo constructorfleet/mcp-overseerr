@@ -220,6 +220,16 @@ INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 Server started successfully.
 ```
 
+### Running the server
+
+`overseerr_mcp.server.main()` launches the FastMCP app over HTTP using the defaults defined in [`src/overseerr_mcp/server.py`](src/overseerr_mcp/server.py). By default the server binds to `http://0.0.0.0:8000/mcp`, which makes it reachable to any host that can reach your machine.
+
+- Run from this repository: `uv run overseerr-mcp`
+- You can override the default transport, host, or port by passing FastMCP's `transport`, `host`, or `port` arguments directly to `app.run(...)` before invoking `overseerr_mcp.server.main()`.
+- Example: `from overseerr_mcp.server import app; app.run(transport="sse", host="127.0.0.1", port=9000, path="/mcp")`
+
+When exposing the HTTP endpoint outside of localhost, confirm that any firewall or reverse proxy allows inbound traffic to the chosen host and port and forwards the `/mcp` path to the MCP server.
+
 ## Development
 
 ### Building
