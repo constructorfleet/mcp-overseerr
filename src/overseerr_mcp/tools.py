@@ -39,6 +39,13 @@ def _load_overseerr_environment() -> tuple[str, str]:
     return url, api_key
 
 
+def _sorted_plain_sequence(values: list[Any]) -> list[Any]:
+    try:
+        return sorted(values)
+    except TypeError:
+        return sorted(values, key=repr)
+
+
 _OVERSEERR_URL, _OVERSEERR_API_KEY = _load_overseerr_environment()
 
 
@@ -85,7 +92,8 @@ def _to_plain(value: Any) -> Any:
     if isinstance(value, tuple):
         return [_to_plain(v) for v in value]
     if isinstance(value, set):
-        return [_to_plain(v) for v in value]
+        plain_values = [_to_plain(v) for v in value]
+        return _sorted_plain_sequence(plain_values)
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     if hasattr(value, "to_dict"):
