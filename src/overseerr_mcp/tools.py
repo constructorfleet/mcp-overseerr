@@ -97,6 +97,13 @@ def _to_plain(value: Any) -> Any:
     return value
 
 
+def _format_status_items(data: dict[str, Any]) -> str:
+    lines = [f"{key}: {val}" for key, val in data.items()]
+    if not lines:
+        return "\n- "
+    return "\n- " + "\n- ".join(lines)
+
+
 @asynccontextmanager
 async def _overseerr_client(
     overseerr_factory: OverseerrFactory,
@@ -210,15 +217,15 @@ class StatusToolHandler(ToolHandler):
 
         if isinstance(data, dict) and "version" in data:
             status_response = "\n---\nOverseerr is available and these are the status data:\n"
-            status_response += "\n- " + "\n- ".join([f"{key}: {val}" for key, val in data.items()])
+            status_response += _format_status_items(data)
         else:
             status_response = "\n---\nOverseerr is not available and below is the request error: \n"
             if isinstance(data, dict):
-                status_response += "\n- " + "\n- ".join(
-                    [f"{key}: {val}" for key, val in data.items()]
-                )
+                status_response += _format_status_items(data)
             else:
                 status_response += f"\n- {data}"
+
+        status_response += "\n"
 
         return [
             TextContent(

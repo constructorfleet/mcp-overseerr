@@ -400,3 +400,63 @@ def test_tv_requests_handler_fetches_season_details():
             "request_date": "2020-09-14T10:00:27.000Z",
         }
     ]
+
+
+def test_status_handler_reports_successful_status():
+    handler = StatusToolHandler(overseerr_factory=lambda: _FakeStatusClient({"version": "1.2.3"}))
+
+    async def invoke():
+        return await handler.run_tool({})
+
+    response = asyncio.run(invoke())
+
+    assert len(response) == 1
+    assert response[0].text == (
+        "\n---\nOverseerr is available and these are the status data:\n"
+        "\n- version: 1.2.3\n"
+    )
+
+
+def test_status_handler_reports_error_payload():
+    handler = StatusToolHandler(
+        overseerr_factory=lambda: _FakeStatusClient({"error": "Gateway Timeout"})
+    )
+
+    async def invoke():
+        return await handler.run_tool({})
+
+    response = asyncio.run(invoke())
+
+    assert len(response) == 1
+    assert response[0].text == (
+        "\n---\nOverseerr is not available and below is the request error: \n"
+        "\n- error: Gateway Timeout\n"
+    )
+
+
+def test_status_handler_handles_non_dict_status():
+    handler = StatusToolHandler(
+        overseerr_factory=lambda: _FakeStatusClient("503 Service Unavailable")
+    )
+
+    async def invoke():
+        return await handler.run_tool({})
+
+    response = asyncio.run(invoke())
+
+    assert len(response) == 1
+    assert response[0].text == (
+        "\n---\nOverseerr is not available and below is the request error: \n"
+        "\n- 503 Service Unavailable\n"
+    )
+
+
+class _FakeStatusClient:
+    def __init__(self, payload):
+        self._payload = payload
+
+    async def get_status(self):
+        return self._payload
+
+    async def aclose(self):
+        return None
