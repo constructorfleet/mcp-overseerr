@@ -39,25 +39,11 @@ tv_requests_tool_handler = tools.TvRequestsToolHandler()
 
 
 
-@app.tool(
-    name="overseerr_get_status",
-    description="Get the current status and version of the Overseerr server.",
-    tags={"overseerr", "status"},
-)
 async def overseerr_status() -> str:
     """Get the current status and version of the Overseerr server."""
     result = await status_tool_handler.run_tool({})
     return result[0].text if result else "No status available"
 
-
-
-
-
-@app.tool(
-    name="overseerr_get_movie_requests",
-    description="Get a list of movie requests from Overseerr. Can be filtered by status (e.g., 'approved', 'pending') and start date.",
-    tags={"overseerr", "movie", "requests"},
-)
 async def overseerr_movie_requests(
     status: Optional[str] = None, start_date: Optional[str] = None
 ) -> str:
@@ -66,11 +52,6 @@ async def overseerr_movie_requests(
     result = await movie_requests_tool_handler.run_tool(args)
     return result[0].text if result else "No movie requests found"
 
-@app.tool(
-    name="overseerr_get_tv_requests",
-    description="Get a list of TV show requests from Overseerr. Can be filtered by status (e.g., 'approved', 'pending') and start date.",
-    tags={"overseerr", "tv", "requests"},
-)
 async def overseerr_tv_requests(
     status: Optional[str] = None, start_date: Optional[str] = None
 ) -> str:
@@ -78,6 +59,41 @@ async def overseerr_tv_requests(
     args = {"status": status, "start_date": start_date}
     result = await tv_requests_tool_handler.run_tool(args)
     return result[0].text if result else "No TV requests found"
+
+def _register_tool(
+    fn,
+    *,
+    name: str,
+    description: str,
+    tags: set[str],
+):
+    return app.tool(
+        name=name,
+        description=description,
+        tags=tags,
+    )(fn)
+
+
+overseerr_status_tool = _register_tool(
+    overseerr_status,
+    name="overseerr_get_status",
+    description="Get the current status and version of the Overseerr server.",
+    tags={"overseerr", "status"},
+)
+
+overseerr_movie_requests_tool = _register_tool(
+    overseerr_movie_requests,
+    name="overseerr_get_movie_requests",
+    description="Get a list of movie requests from Overseerr. Can be filtered by status (e.g., 'approved', 'pending') and start date.",
+    tags={"overseerr", "movie", "requests"},
+)
+
+overseerr_tv_requests_tool = _register_tool(
+    overseerr_tv_requests,
+    name="overseerr_get_tv_requests",
+    description="Get a list of TV show requests from Overseerr. Can be filtered by status (e.g., 'approved', 'pending') and start date.",
+    tags={"overseerr", "tv", "requests"},
+)
 
 def main():
     """Main entry point for the overseerr-mcp server."""
