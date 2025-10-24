@@ -24,6 +24,44 @@ from overseerr_mcp.tools import (
 )
 
 
+@pytest.mark.asyncio
+async def test_status_handler_reports_successful_status():
+    class FakeClient:
+        async def get_status(self):
+            return {"version": "2024.5.1"}
+
+        async def aclose(self):
+            return None
+
+    handler = StatusToolHandler(overseerr_factory=lambda: FakeClient())
+
+    results = await handler.run_tool({})
+
+    assert len(results) == 1
+    status_text = results[0].text
+    assert "Overseerr is available and these are the status data:" in status_text
+    assert "\n- version: 2024.5.1" in status_text
+
+
+@pytest.mark.asyncio
+async def test_status_handler_reports_error_payload():
+    class FakeClient:
+        async def get_status(self):
+            return {"error": "Unauthorized"}
+
+        async def aclose(self):
+            return None
+
+    handler = StatusToolHandler(overseerr_factory=lambda: FakeClient())
+
+    results = await handler.run_tool({})
+
+    assert len(results) == 1
+    status_text = results[0].text
+    assert "Overseerr is not available and below is the request error:" in status_text
+    assert "\n- error: Unauthorized" in status_text
+
+
 
 def test_movie_handler_validates_arguments_with_input_model(monkeypatch):
     handler = MovieRequestsToolHandler()

@@ -106,7 +106,7 @@ def _to_plain(value: Any) -> Any:
 
 
 def _format_status_items(data: dict[str, Any]) -> str:
-    lines = [f"{key}: {val}" for key, val in data.items()]
+    lines = [f"{key}: {val}" for key, val in sorted(data.items())]
     if not lines:
         return "\n- "
     return "\n- " + "\n- ".join(lines)
