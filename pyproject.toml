@@ -38,3 +38,8 @@ overseerr-mcp = "overseerr_mcp:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+markers = [
+    "asyncio: mark test as using asyncio",
+]
