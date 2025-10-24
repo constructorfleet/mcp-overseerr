@@ -5,6 +5,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from dataclasses import dataclass
+import pytest
  
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -17,6 +20,7 @@ from overseerr_mcp.tools import (
     MovieRequestsToolHandler,
     StatusToolHandler,
     TvRequestsToolHandler,
+    _to_plain,
 )
 
 
@@ -650,3 +654,70 @@ class _FakeStatusClient:
 
     async def aclose(self):
         return None
+
+
+@dataclass
+class PlainDataclass:
+    name: str
+    numbers: tuple[int, ...]
+    tags: set[str]
+
+
+class DictLikeObject:
+    def __init__(self, payload: dict):
+        self._payload = payload
+
+    def to_dict(self) -> dict:
+        return self._payload
+
+
+class AttributeContainer:
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
+@pytest.fixture
+def plain_dataclass_fixture() -> PlainDataclass:
+    return PlainDataclass(name="sample", numbers=(7, 8), tags={"x", "y"})
+
+
+@pytest.fixture
+def dict_like_fixture() -> DictLikeObject:
+    return DictLikeObject({"inner": {"flag": True}})
+
+
+@pytest.fixture
+def attribute_container_fixture() -> AttributeContainer:
+    return AttributeContainer(kind="widget", level=5)
+
+
+@pytest.fixture
+def plain_payload(
+    plain_dataclass_fixture: PlainDataclass,
+    dict_like_fixture: DictLikeObject,
+    attribute_container_fixture: AttributeContainer,
+) -> dict:
+    return {
+        "mapping": {"key": "value", "count": 2},
+        "sequence": (1, 2, 3),
+        "collection": {"gamma", "alpha", "beta"},
+        "dataclass": plain_dataclass_fixture,
+        "dict_like": dict_like_fixture,
+        "attributes": attribute_container_fixture,
+    }
+
+
+def test_to_plain_normalizes_nested_structures_into_plain_types(plain_payload):
+    result = _to_plain(plain_payload)
+
+    assert result["mapping"] == {"key": "value", "count": 2}
+    assert result["sequence"] == [1, 2, 3]
+    assert result["collection"] == ["alpha", "beta", "gamma"]
+    assert result["dataclass"] == {
+        "name": "sample",
+        "numbers": [7, 8],
+        "tags": ["x", "y"],
+    }
+    assert result["dict_like"] == {"inner": {"flag": True}}
+    assert result["attributes"] == {"kind": "widget", "level": 5}
