@@ -49,3 +49,18 @@ def test_readme_includes_quickstart_run_instructions() -> None:
 
     for snippet, message in required_snippets:
         assert snippet in contents, message
+def test_readme_tools_section_uses_server_identifiers() -> None:
+    contents = _read_readme_contents()
+
+    tools_section_start = contents.index("### Tools")
+    tools_section_end = contents.index("### Example prompts", tools_section_start)
+    tools_section = contents[tools_section_start:tools_section_end]
+
+    expected_identifiers = {
+        "- overseerr_get_status: Get the status of the Overseerr server",
+        "- overseerr_get_movie_requests: Get the list of all movie requests that satisfies the filter arguments",
+        "- overseerr_get_tv_requests: Get the list of all TV show requests that satisfies the filter arguments",
+    }
+
+    for line in expected_identifiers:
+        assert line in tools_section, f"README Tools entry missing or mismatched: {line}"
