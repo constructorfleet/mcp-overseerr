@@ -11,7 +11,11 @@ os.environ.setdefault("OVERSEERR_API_KEY", "test")
 os.environ.setdefault("OVERSEERR_URL", "http://localhost")
 
 from overseerr_mcp.models import MediaRequestsFilter, MediaStatus, TvRequestsFilter
-from overseerr_mcp.tools import MovieRequestsToolHandler, TvRequestsToolHandler
+from overseerr_mcp.tools import (
+    MovieRequestsToolHandler,
+    StatusToolHandler,
+    TvRequestsToolHandler,
+)
 
 
 def test_movie_handler_validates_arguments_with_input_model(monkeypatch):
@@ -127,3 +131,67 @@ def test_tv_handler_validates_arguments_with_input_model(monkeypatch):
     assert captured["start_date"] == datetime(2020, 9, 12, 10, 0, 27, tzinfo=timezone.utc)
     assert json.loads(response[0].text) == []
     assert handler.input_model is TvRequestsFilter
+
+
+def test_tool_descriptions_include_expected_tags():
+    tool_tags = {
+        MovieRequestsToolHandler: {"overseerr", "movie", "requests"},
+        TvRequestsToolHandler: {"overseerr", "tv", "requests"},
+        StatusToolHandler: {"overseerr", "status"},
+    }
+
+    for handler_cls, expected_tags in tool_tags.items():
+        handler = handler_cls()
+        tool_description = handler.get_tool_description()
+
+        assert hasattr(tool_description, "tags"), handler_cls.__name__
+        assert set(tool_description.tags) == expected_tags
+
+
+def test_tool_descriptions_and_arguments_are_documented():
+    expectations = {
+        MovieRequestsToolHandler: {
+            "description": "List Overseerr movie requests filtered by optional status and start date.",
+            "arguments": {
+                "status": (
+                    "Limit results to requests matching the Overseerr status (approved, available, "
+                    "pending, processing, unavailable, failed)."
+                ),
+                "start_date": (
+                    "Return requests created on or after the provided ISO 8601 timestamp "
+                    "(e.g. 2020-09-12T10:00:27Z)."
+                ),
+            },
+        },
+        TvRequestsToolHandler: {
+            "description": "List Overseerr TV requests filtered by optional status and start date.",
+            "arguments": {
+                "status": (
+                    "Limit results to requests matching the Overseerr status (approved, available, "
+                    "pending, processing, unavailable, failed)."
+                ),
+                "start_date": (
+                    "Return requests created on or after the provided ISO 8601 timestamp "
+                    "(e.g. 2020-09-12T10:00:27Z)."
+                ),
+            },
+        },
+        StatusToolHandler: {
+            "description": "Check the current Overseerr server health and report status details.",
+            "arguments": {},
+        },
+    }
+
+    for handler_cls, expectation in expectations.items():
+        handler = handler_cls()
+        tool_description = handler.get_tool_description()
+
+        assert tool_description.description == expectation["description"], handler_cls.__name__
+
+        input_schema = tool_description.inputSchema or {}
+        properties = input_schema.get("properties", {})
+
+        assert set(properties.keys()) >= set(expectation["arguments"].keys())
+
+        for argument, description in expectation["arguments"].items():
+            assert properties[argument]["description"] == description

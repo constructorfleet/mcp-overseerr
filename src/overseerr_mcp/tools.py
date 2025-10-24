@@ -56,9 +56,18 @@ def _normalize_to_utc(dt: datetime | None) -> datetime | None:
 
 
 class ToolHandler():
-    def __init__(self, tool_name: str, input_model: type[BaseModel] | None = None):
+    def __init__(
+        self,
+        tool_name: str,
+        input_model: type[BaseModel] | None = None,
+        *,
+        description: str,
+        tags: Sequence[str] | None = None,
+    ):
         self.name = tool_name
         self.input_model = input_model
+        self._description = description
+        self._tags = tuple(tags or ())
 
     def _get_input_schema(self) -> dict:
         if not self.input_model:
@@ -71,20 +80,23 @@ class ToolHandler():
         return self.input_model.model_validate(args).model_dump()
 
     def get_tool_description(self) -> Tool:
-        raise NotImplementedError()
+        return Tool(
+            name=self.name,
+            description=self._description,
+            inputSchema=self._get_input_schema(),
+            tags=list(self._tags),
+        )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
         raise NotImplementedError()
 
 class StatusToolHandler(ToolHandler):
     def __init__(self):
-        super().__init__(TOOL_GET_STATUS, StatusToolInput)
-
-    def get_tool_description(self):
-        return Tool(
-            name=self.name,
-            description="Get the status of the Overseerr server.",
-            inputSchema=self._get_input_schema(),
+        super().__init__(
+            TOOL_GET_STATUS,
+            StatusToolInput,
+            description="Check the current Overseerr server health and report status details.",
+            tags=("overseerr", "status"),
         )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
@@ -108,13 +120,11 @@ class StatusToolHandler(ToolHandler):
 
 class MovieRequestsToolHandler(ToolHandler):
     def __init__(self):
-        super().__init__(TOOL_GET_MOVIE_REQUESTS, MediaRequestsFilter)
-
-    def get_tool_description(self):
-        return Tool(
-            name=self.name,
-            description="Get the list of all movie requests that satisfies the filter arguments.",
-            inputSchema=self._get_input_schema(),
+        super().__init__(
+            TOOL_GET_MOVIE_REQUESTS,
+            MediaRequestsFilter,
+            description="List Overseerr movie requests filtered by optional status and start date.",
+            tags=("overseerr", "movie", "requests"),
         )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
@@ -203,13 +213,11 @@ class MovieRequestsToolHandler(ToolHandler):
 
 class TvRequestsToolHandler(ToolHandler):
     def __init__(self):
-        super().__init__(TOOL_GET_TV_REQUESTS, TvRequestsFilter)
-
-    def get_tool_description(self):
-        return Tool(
-            name=self.name,
-            description="Get the list of all TV requests that satisfies the filter arguments.",
-            inputSchema=self._get_input_schema(),
+        super().__init__(
+            TOOL_GET_TV_REQUESTS,
+            TvRequestsFilter,
+            description="List Overseerr TV requests filtered by optional status and start date.",
+            tags=("overseerr", "tv", "requests"),
         )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:

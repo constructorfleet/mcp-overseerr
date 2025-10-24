@@ -32,11 +32,17 @@ class MediaRequestsFilter(BaseModel):
 
     status: MediaStatus | None = Field(
         default=None,
-        description="Filter by media availability status.",
+        description=(
+            "Limit results to requests matching the Overseerr status (approved, available, "
+            "pending, processing, unavailable, failed)."
+        ),
     )
     start_date: datetime | None = Field(
         default=None,
-        description="Filter for the date of request, formatted as '2020-09-12T10:00:27.000Z'",
+        description=(
+            "Return requests created on or after the provided ISO 8601 timestamp "
+            "(e.g. 2020-09-12T10:00:27Z)."
+        ),
     )
 
     model_config = {
@@ -49,11 +55,17 @@ class TvRequestsFilter(BaseModel):
 
     status: MediaStatus | None = Field(
         default=None,
-        description="Filter by media availability status.",
+        description=(
+            "Limit results to requests matching the Overseerr status (approved, available, "
+            "pending, processing, unavailable, failed)."
+        ),
     )
     start_date: datetime | None = Field(
         default=None,
-        description="Filter for the date of request, formatted as '2020-09-12T10:00:27.000Z'",
+        description=(
+            "Return requests created on or after the provided ISO 8601 timestamp "
+            "(e.g. 2020-09-12T10:00:27Z)."
+        ),
     )
 
     model_config = {
