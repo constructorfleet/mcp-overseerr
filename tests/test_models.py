@@ -43,9 +43,13 @@ def test_media_filters_expose_expected_field_metadata():
         status_field = field_map["status"]
         start_date_field = field_map["start_date"]
 
-        assert status_field.description == "Filter by media availability status."
+        assert status_field.description == (
+            "Limit results to requests matching the Overseerr status (approved, available, "
+            "pending, processing, unavailable, failed)."
+        )
         assert start_date_field.description == (
-            "Filter for the date of request, formatted as '2020-09-12T10:00:27.000Z'"
+            "Return requests created on or after the provided ISO 8601 timestamp "
+            "(e.g. 2020-09-12T10:00:27Z)."
         )
 
         status_annotation = status_field.annotation
