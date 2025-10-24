@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
@@ -17,17 +17,31 @@ from pydantic import BaseModel
 from .client import OverseerrApis
 from .models import MediaRequestsFilter, MediaStatus, StatusToolInput, TvRequestsFilter
 
+OverseerrFactory = Callable[[], OverseerrApis]
+
 # Constants for tool names
 TOOL_GET_STATUS = "overseerr_status"
 TOOL_GET_MOVIE_REQUESTS = "overseerr_movie_requests"
 TOOL_GET_TV_REQUESTS = "overseerr_tv_requests"
 
 # Environment variables
-api_key = os.getenv("OVERSEERR_API_KEY", "")
-url = os.getenv("OVERSEERR_URL", "")
+def _load_overseerr_environment() -> tuple[str, str]:
+    api_key = os.getenv("OVERSEERR_API_KEY", "")
+    url = os.getenv("OVERSEERR_URL", "")
 
-if not api_key or not url:
-    raise ValueError("OVERSEERR_API_KEY and OVERSEERR_URL environment variables are required")
+    if not api_key or not url:
+        raise ValueError(
+            "OVERSEERR_API_KEY and OVERSEERR_URL environment variables are required"
+        )
+
+    return url, api_key
+
+
+_OVERSEERR_URL, _OVERSEERR_API_KEY = _load_overseerr_environment()
+
+
+def create_overseerr_apis() -> OverseerrApis:
+    return OverseerrApis(base_url=_OVERSEERR_URL, api_key=_OVERSEERR_API_KEY)
 
 # Media status mapping
 MEDIA_STATUS_MAPPING = {
@@ -37,6 +51,8 @@ MEDIA_STATUS_MAPPING = {
     4: "PARTIALLY_AVAILABLE",
     5: "AVAILABLE"
 }
+
+REQUEST_PAGE_SIZE = 20
 
 
 def _to_plain(value: Any) -> Any:
@@ -60,12 +76,35 @@ def _to_plain(value: Any) -> Any:
 
 
 @asynccontextmanager
-async def _overseerr_client() -> AsyncIterator[OverseerrApis]:
-    client = OverseerrApis(base_url=url, api_key=api_key)
+async def _overseerr_client(
+    overseerr_factory: OverseerrFactory,
+) -> AsyncIterator[OverseerrApis]:
+    client = overseerr_factory()
     try:
         yield client
     finally:
         await client.aclose()
+
+
+async def _iter_request_pages(
+    client: OverseerrApis,
+    *,
+    status_filter: str | None,
+    take: int = REQUEST_PAGE_SIZE,
+) -> AsyncIterator[dict[str, Any]]:
+    skip = 0
+    while True:
+        response = await client.get_requests(take=take, skip=skip, filter=status_filter)
+        page = _to_plain(response)
+        yield page
+
+        page_info = _to_plain(page.get("pageInfo") or page.get("page_info") or {})
+        total_pages = int(page_info.get("pages") or 0)
+        current_page = (skip // take) + 1
+        if total_pages <= current_page or total_pages == 0:
+            break
+
+        skip += take
 
 def _parse_datetime(value: str) -> datetime | None:
     if not value:
@@ -97,11 +136,13 @@ class ToolHandler():
         *,
         description: str,
         tags: Sequence[str] | None = None,
+        overseerr_factory: OverseerrFactory = create_overseerr_apis,
     ):
         self.name = tool_name
         self.input_model = input_model
         self._description = description
         self._tags = tuple(tags or ())
+        self._overseerr_factory = overseerr_factory
 
     def _get_input_schema(self) -> dict:
         if not self.input_model:
@@ -125,23 +166,28 @@ class ToolHandler():
         raise NotImplementedError()
 
 class StatusToolHandler(ToolHandler):
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        overseerr_factory: OverseerrFactory = create_overseerr_apis,
+    ):
         super().__init__(
             TOOL_GET_STATUS,
             StatusToolInput,
             description="Check the current Overseerr server health and report status details.",
             tags=("overseerr", "status"),
+            overseerr_factory=overseerr_factory,
         )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
-        async with _overseerr_client() as client:
+        async with _overseerr_client(self._overseerr_factory) as client:
             data = _to_plain(await client.get_status())
 
         if isinstance(data, dict) and "version" in data:
-            status_response = f"\n---\nOverseerr is available and these are the status data:\n"
+            status_response = "\n---\nOverseerr is available and these are the status data:\n"
             status_response += "\n- " + "\n- ".join([f"{key}: {val}" for key, val in data.items()])
         else:
-            status_response = f"\n---\nOverseerr is not available and below is the request error: \n"
+            status_response = "\n---\nOverseerr is not available and below is the request error: \n"
             if isinstance(data, dict):
                 status_response += "\n- " + "\n- ".join(
                     [f"{key}: {val}" for key, val in data.items()]
@@ -157,12 +203,17 @@ class StatusToolHandler(ToolHandler):
         ]
 
 class MovieRequestsToolHandler(ToolHandler):
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        overseerr_factory: OverseerrFactory = create_overseerr_apis,
+    ):
         super().__init__(
             TOOL_GET_MOVIE_REQUESTS,
             MediaRequestsFilter,
             description="List Overseerr movie requests filtered by optional status and start date.",
             tags=("overseerr", "movie", "requests"),
+            overseerr_factory=overseerr_factory,
         )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
@@ -185,18 +236,11 @@ class MovieRequestsToolHandler(ToolHandler):
     ):
         normalized_start_date = _normalize_to_utc(start_date)
 
-        take = 20
-        skip = 0
-        has_more = True
         status_filter = getattr(status, "value", status) if status else None
 
         results: list[dict[str, object]] = []
-        async with _overseerr_client() as client:
-            while has_more:
-                page = _to_plain(
-                    await client.get_requests(take=take, skip=skip, filter=status_filter)
-                )
-
+        async with _overseerr_client(self._overseerr_factory) as client:
+            async for page in _iter_request_pages(client, status_filter=status_filter):
                 for result in page.get("results", []):
                     result_data = _to_plain(result)
                     media_info = _to_plain(result_data.get("media"))
@@ -236,24 +280,20 @@ class MovieRequestsToolHandler(ToolHandler):
                         }
                     )
 
-                page_info = _to_plain(
-                    page.get("pageInfo") or page.get("page_info") or {}
-                )
-                total_pages = int(page_info.get("pages") or 0)
-                if total_pages <= (skip // take) + 1:
-                    has_more = False
-                else:
-                    skip += take
-
         return results
 
 class TvRequestsToolHandler(ToolHandler):
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        overseerr_factory: Callable[[], OverseerrApis] = create_overseerr_apis,
+    ):
         super().__init__(
             TOOL_GET_TV_REQUESTS,
             TvRequestsFilter,
             description="List Overseerr TV requests filtered by optional status and start date.",
             tags=("overseerr", "tv", "requests"),
+            overseerr_factory=overseerr_factory,
         )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
@@ -276,18 +316,11 @@ class TvRequestsToolHandler(ToolHandler):
     ):
         normalized_start_date = _normalize_to_utc(start_date)
 
-        take = 20
-        skip = 0
-        has_more = True
         status_filter = getattr(status, "value", status) if status else None
 
         results: list[dict[str, object]] = []
-        async with _overseerr_client() as client:
-            while has_more:
-                page = _to_plain(
-                    await client.get_requests(take=take, skip=skip, filter=status_filter)
-                )
-
+        async with _overseerr_client(self._overseerr_factory) as client:
+            async for page in _iter_request_pages(client, status_filter=status_filter):
                 for result in page.get("results", []):
                     result_data = _to_plain(result)
                     media_info = _to_plain(result_data.get("media"))
@@ -360,14 +393,5 @@ class TvRequestsToolHandler(ToolHandler):
                                 "request_date": created_at,
                             }
                         )
-
-                page_info = _to_plain(
-                    page.get("pageInfo") or page.get("page_info") or {}
-                )
-                total_pages = int(page_info.get("pages") or 0)
-                if total_pages <= (skip // take) + 1:
-                    has_more = False
-                else:
-                    skip += take
 
         return results

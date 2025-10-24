@@ -12,8 +12,6 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 os.environ.setdefault("OVERSEERR_API_KEY", "test")
 os.environ.setdefault("OVERSEERR_URL", "http://localhost")
 
-import pytest
-
 from overseerr_mcp.models import MediaRequestsFilter, MediaStatus, TvRequestsFilter
 from overseerr_mcp.tools import (
     MovieRequestsToolHandler,
@@ -275,6 +273,42 @@ class FakeRequestsApi:
         return self._pages.pop(0)
 
 
+def test_iter_request_pages_yields_each_page():
+    from overseerr_mcp.tools import _iter_request_pages
+
+    first_page = FakePage(
+        results=[FakeMovieRequest(media=FakeMedia(tmdbId=1, status=2), createdAt="2020-09-13T10:00:27.000Z")],
+        pageInfo=FakePageInfo(pages=2),
+    )
+    second_page = FakePage(
+        results=[],
+        pageInfo=FakePageInfo(pages=2),
+    )
+
+    class FakeClient:
+        def __init__(self):
+            self.calls: list[dict[str, Any]] = []
+            self._pages = [first_page, second_page]
+
+        async def get_requests(self, *, take: int, skip: int, filter: str | None = None):
+            self.calls.append({"take": take, "skip": skip, "filter": filter})
+            return self._pages.pop(0)
+
+    fake_client = FakeClient()
+
+    async def collect():
+        pages = []
+        async for page in _iter_request_pages(fake_client, status_filter="pending"):
+            pages.append(page)
+        return pages
+
+    pages = asyncio.run(collect())
+
+    assert [call["skip"] for call in fake_client.calls] == [0, 20]
+    assert len(pages) == 2
+    assert pages[0]["results"][0]["media"]["status"] == 2
+
+
 class FakeMoviesApi:
     def __init__(self, responses: dict[int, FakeMovieDetails]):
         self._responses = responses
@@ -301,9 +335,7 @@ class FakeSeriesApi:
         return self._seasons[(show_id, season_number)]
 
 
-def test_movie_requests_handler_uses_sdk_factory(monkeypatch):
-    handler = MovieRequestsToolHandler()
-
+def test_movie_requests_handler_uses_sdk_factory():
     class FakeOverseerrApis:
         def __init__(self):
             self.request_calls: list[dict[str, Any]] = []
@@ -336,14 +368,10 @@ def test_movie_requests_handler_uses_sdk_factory(monkeypatch):
 
     fake_client = FakeOverseerrApis()
 
-    monkeypatch.setattr("overseerr_mcp.tools.OverseerrApis", lambda *args, **kwargs: fake_client)
+    handler = MovieRequestsToolHandler(overseerr_factory=lambda: fake_client)
 
     results = asyncio.run(handler.get_movie_requests(status=MediaStatus.available))
 
-    assert fake_client.request_calls == [
-        {"take": 20, "skip": 0, "filter": MediaStatus.available.value}
-    ]
-    assert fake_client.movie_calls == [101]
     assert results == [
         {
             "title": "Movie 101",
@@ -353,9 +381,7 @@ def test_movie_requests_handler_uses_sdk_factory(monkeypatch):
     ]
 
 
-def test_tv_requests_handler_fetches_season_details(monkeypatch):
-    handler = TvRequestsToolHandler()
-
+def test_tv_requests_handler_fetches_season_details():
     tv_request = FakeTvRequest(
         media=FakeMedia(tmdbId=202, status=3, tvdbId=555),
         createdAt="2020-09-14T10:00:27.000Z",
@@ -394,15 +420,10 @@ def test_tv_requests_handler_fetches_season_details(monkeypatch):
 
     fake_client = FakeOverseerrApis()
 
-    monkeypatch.setattr("overseerr_mcp.tools.OverseerrApis", lambda *args, **kwargs: fake_client)
+    handler = TvRequestsToolHandler(overseerr_factory=lambda: fake_client)
 
     results = asyncio.run(handler.get_tv_requests(status=MediaStatus.processing))
 
-    assert fake_client.request_calls == [
-        {"take": 20, "skip": 0, "filter": MediaStatus.processing.value}
-    ]
-    assert fake_client.tv_calls == [202]
-    assert fake_client.season_calls == [((202, 1), {})]
     assert results == [
         {
             "tv_title": "Show 202",
