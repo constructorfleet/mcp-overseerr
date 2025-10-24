@@ -10,9 +10,9 @@ MCP server to interact with Overseerr API for movie and TV show requests managem
 
 The server implements multiple tools to interact with Overseerr:
 
-- overseerr_status: Get the status of the Overseerr server
-- overseerr_movie_requests: Get the list of all movie requests that satisfies the filter arguments
-- overseerr_tv_requests: Get the list of all TV show requests that satisfies the filter arguments
+- overseerr_get_status: Get the status of the Overseerr server
+- overseerr_get_movie_requests: Get the list of all movie requests that satisfies the filter arguments
+- overseerr_get_tv_requests: Get the list of all TV show requests that satisfies the filter arguments
 
 #### overseerr_movie_requests response structure
 
