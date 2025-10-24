@@ -2,79 +2,22 @@ import asyncio
 import json
 import os
 import sys
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Sequence
-
+from typing import Any
+ 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 os.environ.setdefault("OVERSEERR_API_KEY", "test")
 os.environ.setdefault("OVERSEERR_URL", "http://localhost")
 
+from overseerr import models
 from overseerr_mcp.models import MediaRequestsFilter, MediaStatus, TvRequestsFilter
 from overseerr_mcp.tools import (
     MovieRequestsToolHandler,
     StatusToolHandler,
     TvRequestsToolHandler,
 )
-
-
-@dataclass
-class FakePageInfo:
-    pages: int
-
-
-@dataclass
-class FakeMedia:
-    tmdbId: int
-    status: int
-    tvdbId: int | None = None
-
-
-@dataclass
-class FakeMovieRequest:
-    media: FakeMedia
-    createdAt: str
-
-
-@dataclass
-class FakeTvRequest:
-    media: FakeMedia
-    createdAt: str
-
-
-@dataclass
-class FakePage:
-    results: Sequence[Any]
-    pageInfo: FakePageInfo
-
-
-@dataclass
-class FakeMovieDetails:
-    title: str
-
-
-@dataclass
-class FakeSeason:
-    seasonNumber: int
-
-
-@dataclass
-class FakeEpisode:
-    episodeNumber: int
-    name: str
-
-
-@dataclass
-class FakeSeasonDetails:
-    episodes: Sequence[FakeEpisode]
-
-
-@dataclass
-class FakeTvDetails:
-    name: str
-    seasons: Sequence[FakeSeason]
 
 
 
@@ -123,23 +66,27 @@ def test_movie_request_filters_use_typed_values(monkeypatch):
         async def get_requests(self, *, take: int, skip: int, filter: str | None = None):
             self.request_params.append({"take": take, "skip": skip, "filter": filter})
             self.request_calls += 1
-            return FakePage(
+            return models.GetUserRequests2XXResponse(
                 results=[
-                    FakeMovieRequest(
-                        media=FakeMedia(tmdbId=1, status=2),
-                        createdAt="2020-09-13T10:00:27.000Z",
+                    models.MediaRequest(
+                        id=1,
+                        status=2,
+                        created_at="2020-09-13T10:00:27.000Z",
+                        media=models.MediaInfo(tmdb_id=1, status=2),
                     ),
-                    FakeMovieRequest(
-                        media=FakeMedia(tmdbId=2, status=5),
-                        createdAt="2020-09-11T10:00:27.000Z",
+                    models.MediaRequest(
+                        id=2,
+                        status=3,
+                        created_at="2020-09-11T10:00:27.000Z",
+                        media=models.MediaInfo(tmdb_id=2, status=5),
                     ),
                 ],
-                pageInfo=FakePageInfo(pages=1),
+                page_info=models.PageInfo(pages=1),
             )
 
         async def get_movie_by_movie_id(self, movie_id: int):
             self.movie_calls.append(movie_id)
-            return FakeMovieDetails(title=f"movie-{movie_id}")
+            return models.MovieDetails(title=f"movie-{movie_id}")
 
         async def aclose(self):
             return None
@@ -262,27 +209,23 @@ def test_tool_descriptions_and_arguments_are_documented():
         for argument, description in expectation["arguments"].items():
             assert properties[argument]["description"] == description
 
-
-class FakeRequestsApi:
-    def __init__(self, pages: list[FakePage]):
-        self._pages = pages
-        self.calls: list[dict[str, Any]] = []
-
-    async def list(self, *, take: int, skip: int, filter: str | None = None) -> FakePage:
-        self.calls.append({"take": take, "skip": skip, "filter": filter})
-        return self._pages.pop(0)
-
-
 def test_iter_request_pages_yields_each_page():
     from overseerr_mcp.tools import _iter_request_pages
 
-    first_page = FakePage(
-        results=[FakeMovieRequest(media=FakeMedia(tmdbId=1, status=2), createdAt="2020-09-13T10:00:27.000Z")],
-        pageInfo=FakePageInfo(pages=2),
+    first_page = models.GetUserRequests2XXResponse(
+        results=[
+            models.MediaRequest(
+                id=1,
+                status=2,
+                created_at="2020-09-13T10:00:27.000Z",
+                media=models.MediaInfo(tmdb_id=1, status=2),
+            )
+        ],
+        page_info=models.PageInfo(pages=2),
     )
-    second_page = FakePage(
+    second_page = models.GetUserRequests2XXResponse(
         results=[],
-        pageInfo=FakePageInfo(pages=2),
+        page_info=models.PageInfo(pages=2),
     )
 
     class FakeClient:
@@ -306,33 +249,48 @@ def test_iter_request_pages_yields_each_page():
 
     assert [call["skip"] for call in fake_client.calls] == [0, 20]
     assert len(pages) == 2
-    assert pages[0]["results"][0]["media"]["status"] == 2
+    assert pages[0].results[0].media.status == 2
 
 
-class FakeMoviesApi:
-    def __init__(self, responses: dict[int, FakeMovieDetails]):
-        self._responses = responses
-        self.calls: list[int] = []
+def test_iter_request_pages_returns_pydantic_models():
+    from overseerr import models
+    from overseerr_mcp.tools import _iter_request_pages
 
-    async def get(self, movie_id: int) -> FakeMovieDetails:
-        self.calls.append(movie_id)
-        return self._responses[movie_id]
+    first_page = models.GetUserRequests2XXResponse(
+        page_info=models.PageInfo(pages=2),
+        results=[
+            models.MediaRequest(
+                id=1,
+                status=2,
+                created_at="2020-09-13T10:00:27.000Z",
+                media=models.MediaInfo(tmdb_id=123, status=5),
+            )
+        ],
+    )
+    second_page = models.GetUserRequests2XXResponse(
+        page_info=models.PageInfo(pages=2),
+        results=[],
+    )
 
+    class FakeClient:
+        def __init__(self):
+            self._pages = [first_page, second_page]
 
-class FakeSeriesApi:
-    def __init__(self, shows: dict[int, FakeTvDetails], seasons: dict[tuple[int, int], FakeSeasonDetails]):
-        self._shows = shows
-        self._seasons = seasons
-        self.detail_calls: list[int] = []
-        self.season_calls: list[tuple[int, int]] = []
+        async def get_requests(self, *, take: int, skip: int, filter: str | None = None):
+            return self._pages.pop(0)
 
-    async def get(self, show_id: int) -> FakeTvDetails:
-        self.detail_calls.append(show_id)
-        return self._shows[show_id]
+    fake_client = FakeClient()
 
-    async def get_season(self, show_id: int, season_number: int) -> FakeSeasonDetails:
-        self.season_calls.append((show_id, season_number))
-        return self._seasons[(show_id, season_number)]
+    async def collect():
+        pages = []
+        async for page in _iter_request_pages(fake_client, status_filter=None):
+            pages.append(page)
+        return pages
+
+    pages = asyncio.run(collect())
+
+    assert all(isinstance(page, models.GetUserRequests2XXResponse) for page in pages)
+    assert pages[0].results[0].media.tmdb_id == 123
 
 
 def test_movie_requests_handler_uses_sdk_factory():
@@ -343,19 +301,21 @@ def test_movie_requests_handler_uses_sdk_factory():
 
         async def get_requests(self, *, take: int, skip: int, filter: str | None = None):
             self.request_calls.append({"take": take, "skip": skip, "filter": filter})
-            return FakePage(
+            return models.GetUserRequests2XXResponse(
                 results=[
-                    FakeMovieRequest(
-                        media=FakeMedia(tmdbId=101, status=5),
-                        createdAt="2020-09-13T10:00:27.000Z",
+                    models.MediaRequest(
+                        id=101,
+                        status=2,
+                        created_at="2020-09-13T10:00:27.000Z",
+                        media=models.MediaInfo(tmdb_id=101, status=5),
                     )
                 ],
-                pageInfo=FakePageInfo(pages=1),
+                page_info=models.PageInfo(pages=1),
             )
 
         async def get_movie_by_movie_id(self, movie_id: int):
             self.movie_calls.append(movie_id)
-            return FakeMovieDetails(title="Movie 101")
+            return models.MovieDetails(title="Movie 101")
 
         async def get_tv_by_tv_id(self, tv_id: int):
             raise AssertionError("TV API should not be called for movie requests")
@@ -382,9 +342,11 @@ def test_movie_requests_handler_uses_sdk_factory():
 
 
 def test_tv_requests_handler_fetches_season_details():
-    tv_request = FakeTvRequest(
-        media=FakeMedia(tmdbId=202, status=3, tvdbId=555),
-        createdAt="2020-09-14T10:00:27.000Z",
+    tv_request = models.MediaRequest(
+        id=202,
+        status=2,
+        created_at="2020-09-14T10:00:27.000Z",
+        media=models.MediaInfo(tmdb_id=202, tvdb_id=555, status=3),
     )
     class FakeOverseerrApis:
         def __init__(self):
@@ -394,9 +356,9 @@ def test_tv_requests_handler_fetches_season_details():
 
         async def get_requests(self, *, take: int, skip: int, filter: str | None = None):
             self.request_calls.append({"take": take, "skip": skip, "filter": filter})
-            return FakePage(
+            return models.GetUserRequests2XXResponse(
                 results=[tv_request],
-                pageInfo=FakePageInfo(pages=1),
+                page_info=models.PageInfo(pages=1),
             )
 
         async def get_movie_by_movie_id(self, movie_id: int):
@@ -404,15 +366,19 @@ def test_tv_requests_handler_fetches_season_details():
 
         async def get_tv_by_tv_id(self, tv_id: int):
             self.tv_calls.append(tv_id)
-            return FakeTvDetails(
+            return models.TvDetails(
                 name="Show 202",
-                seasons=[FakeSeason(seasonNumber=0), FakeSeason(seasonNumber=1)],
+                seasons=[
+                    models.Season(season_number=0),
+                    models.Season(season_number=1),
+                ],
             )
 
         async def get_tv_season_by_season_id(self, *args, **kwargs):
             self.season_calls.append((args, kwargs))
-            return FakeSeasonDetails(
-                episodes=[FakeEpisode(episodeNumber=1, name="Pilot")]
+            return models.Season(
+                season_number=1,
+                episodes=[models.Episode(episode_number=1, name="Pilot")],
             )
 
         async def aclose(self):

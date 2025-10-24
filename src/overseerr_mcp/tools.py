@@ -6,6 +6,8 @@ import json
 import os
 from typing import Any, AsyncIterator
 
+from overseerr import models as overseerr_models
+
 from mcp.types import (
     Tool,
     TextContent,
@@ -55,6 +57,26 @@ MEDIA_STATUS_MAPPING = {
 REQUEST_PAGE_SIZE = 20
 
 
+def _media_availability_from_status(status_code: float | int | None) -> str:
+    if status_code is None:
+        return "UNKNOWN"
+    try:
+        return MEDIA_STATUS_MAPPING.get(int(status_code), "UNKNOWN")
+    except (TypeError, ValueError):
+        return "UNKNOWN"
+
+
+def _should_exclude_by_start_date(
+    normalized_start_date: datetime | None, created_at: str | None
+) -> bool:
+    created_at_dt = _normalize_to_utc(_parse_datetime(created_at or ""))
+    return bool(
+        normalized_start_date
+        and created_at_dt
+        and normalized_start_date > created_at_dt
+    )
+
+
 def _to_plain(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: _to_plain(v) for k, v in value.items()}
@@ -91,15 +113,18 @@ async def _iter_request_pages(
     *,
     status_filter: str | None,
     take: int = REQUEST_PAGE_SIZE,
-) -> AsyncIterator[dict[str, Any]]:
+) -> AsyncIterator[overseerr_models.GetUserRequests2XXResponse]:
     skip = 0
     while True:
-        response = await client.get_requests(take=take, skip=skip, filter=status_filter)
-        page = _to_plain(response)
+        page = await client.get_requests(take=take, skip=skip, filter=status_filter)
         yield page
 
-        page_info = _to_plain(page.get("pageInfo") or page.get("page_info") or {})
-        total_pages = int(page_info.get("pages") or 0)
+        page_info = page.page_info
+        total_pages = (
+            int(page_info.pages)
+            if page_info and page_info.pages is not None
+            else 0
+        )
         current_page = (skip // take) + 1
         if total_pages <= current_page or total_pages == 0:
             break
@@ -241,39 +266,32 @@ class MovieRequestsToolHandler(ToolHandler):
         results: list[dict[str, object]] = []
         async with _overseerr_client(self._overseerr_factory) as client:
             async for page in _iter_request_pages(client, status_filter=status_filter):
-                for result in page.get("results", []):
-                    result_data = _to_plain(result)
-                    media_info = _to_plain(result_data.get("media"))
-
-                    if not media_info or media_info.get("tvdbId"):
+                for request in page.results or []:
+                    media_info = request.media
+                    if not media_info or media_info.tvdb_id is not None:
                         continue
 
-                    created_at = result_data.get("createdAt") or result_data.get("created_at")
-                    created_at_dt = _normalize_to_utc(_parse_datetime(created_at or ""))
-                    if (
-                        normalized_start_date
-                        and created_at_dt
-                        and normalized_start_date > created_at_dt
+                    created_at = request.created_at or ""
+                    if _should_exclude_by_start_date(
+                        normalized_start_date, created_at
                     ):
                         continue
 
-                    movie_id = media_info.get("tmdbId") or media_info.get("tmdb_id")
+                    movie_id = media_info.tmdb_id
                     if movie_id is None:
                         continue
 
-                    movie_details = _to_plain(
-                        await client.get_movie_by_movie_id(int(movie_id))
+                    movie_details = await client.get_movie_by_movie_id(int(movie_id))
+
+                    media_availability = _media_availability_from_status(
+                        media_info.status
                     )
 
-                    media_status_code = media_info.get("status") or 1
-                    media_availability = MEDIA_STATUS_MAPPING.get(
-                        int(media_status_code), "UNKNOWN"
-                    )
-
+                    additional = getattr(movie_details, "additional_properties", {})
                     results.append(
                         {
-                            "title": movie_details.get("title")
-                            or movie_details.get("name")
+                            "title": movie_details.title
+                            or additional.get("name")
                             or "Unknown Movie",
                             "media_availability": media_availability,
                             "request_date": created_at,
@@ -321,57 +339,42 @@ class TvRequestsToolHandler(ToolHandler):
         results: list[dict[str, object]] = []
         async with _overseerr_client(self._overseerr_factory) as client:
             async for page in _iter_request_pages(client, status_filter=status_filter):
-                for result in page.get("results", []):
-                    result_data = _to_plain(result)
-                    media_info = _to_plain(result_data.get("media"))
-                    if not media_info or not media_info.get("tvdbId"):
+                for request in page.results or []:
+                    media_info = request.media
+                    if not media_info or media_info.tvdb_id is None:
                         continue
 
-                    created_at = result_data.get("createdAt") or result_data.get("created_at")
-                    created_at_dt = _normalize_to_utc(_parse_datetime(created_at or ""))
-                    if (
-                        normalized_start_date
-                        and created_at_dt
-                        and normalized_start_date > created_at_dt
+                    created_at = request.created_at or ""
+                    if _should_exclude_by_start_date(
+                        normalized_start_date, created_at
                     ):
                         continue
 
-                    tv_id = media_info.get("tmdbId") or media_info.get("tmdb_id")
+                    tv_id = media_info.tmdb_id
                     if tv_id is None:
                         continue
 
-                    tv_details = _to_plain(await client.get_tv_by_tv_id(int(tv_id)))
+                    tv_details = await client.get_tv_by_tv_id(int(tv_id))
 
-                    media_status_code = media_info.get("status") or 1
-                    tv_title_availability = MEDIA_STATUS_MAPPING.get(
-                        int(media_status_code), "UNKNOWN"
+                    tv_title_availability = _media_availability_from_status(
+                        media_info.status
                     )
 
-                    for season in tv_details.get("seasons", []):
-                        season_data = _to_plain(season)
-                        season_number = season_data.get("seasonNumber") or season_data.get(
-                            "season_number"
-                        )
-                        if not season_number or int(season_number) == 0:
+                    for season in tv_details.seasons or []:
+                        season_number = season.season_number
+                        if season_number is None or int(season_number) == 0:
                             continue
 
-                        season_details = _to_plain(
-                            await client.get_tv_season_by_season_id(
-                                int(tv_id), int(season_number)
-                            )
+                        season_details = await client.get_tv_season_by_season_id(
+                            int(tv_id), int(season_number)
                         )
 
                         episode_details = []
-                        for episode in season_details.get("episodes", []):
-                            episode_data = _to_plain(episode)
-                            episode_number = (
-                                episode_data.get("episodeNumber")
-                                or episode_data.get("episode_number")
-                                or 0
-                            )
+                        for episode in season_details.episodes or []:
+                            episode_number = episode.episode_number or 0
                             name = (
-                                episode_data.get("name")
-                                or episode_data.get("title")
+                                episode.name
+                                or episode.additional_properties.get("title")
                                 or f"Episode {episode_number}"
                             )
                             episode_details.append(
@@ -381,10 +384,11 @@ class TvRequestsToolHandler(ToolHandler):
                                 }
                             )
 
+                        additional = getattr(tv_details, "additional_properties", {})
                         results.append(
                             {
-                                "tv_title": tv_details.get("name")
-                                or tv_details.get("title")
+                                "tv_title": tv_details.name
+                                or additional.get("title")
                                 or "Unknown TV Show",
                                 "tv_title_availability": tv_title_availability,
                                 "tv_season": f"S{int(season_number):02d}",
