@@ -5,11 +5,15 @@ def _read_readme_contents() -> str:
     readme_path = Path("README.md")
     assert readme_path.exists(), "README.md must exist"
     return readme_path.read_text(encoding="utf-8")
+  
+def assert_snippets(required_snippets) -> None:
+    contents = _read_readme_contents()
+
+    for snippet, message in required_snippets:
+        assert snippet in contents, message
 
 
 def test_readme_includes_uv_testing_instructions() -> None:
-    contents = _read_readme_contents()
-
     required_snippets = (
         ("uv venv", "README should instruct creating a uv virtual environment"),
         (
@@ -18,13 +22,10 @@ def test_readme_includes_uv_testing_instructions() -> None:
         ),
     )
 
-    for snippet, message in required_snippets:
-        assert snippet in contents, message
+    assert_snippets(required_snippets)
 
 
 def test_readme_includes_quickstart_run_instructions() -> None:
-    contents = _read_readme_contents()
-
     required_snippets = (
         ("### Run", "README should document how to run the server"),
         ("uvx overseerr-mcp", "README should mention the published command"),
@@ -47,8 +48,56 @@ def test_readme_includes_quickstart_run_instructions() -> None:
         ),
     )
 
-    for snippet, message in required_snippets:
-        assert snippet in contents, message
+    assert_snippets(required_snippets)
+
+
+def test_readme_documents_request_tool_structures() -> None:
+    required_snippets = (
+        (
+            "#### overseerr_movie_requests response structure",
+            "README should document the movie request response section",
+        ),
+        (
+            "MovieRequestsToolHandler.get_movie_requests",
+            "README should cross-reference the movie request implementation",
+        ),
+        (
+            "`media_availability` values: `UNKNOWN`, `PENDING`, `PROCESSING`, `PARTIALLY_AVAILABLE`, `AVAILABLE`",
+            "README should list media availability values for movie requests",
+        ),
+        (
+            "`request_date` (ISO 8601 creation timestamp from Overseerr)",
+            "README should describe the movie request timestamp",
+        ),
+        (
+            "Movie request example",
+            "README should provide a sample movie request payload",
+        ),
+        (
+            "#### overseerr_tv_requests response structure",
+            "README should document the tv request response section",
+        ),
+        (
+            "TvRequestsToolHandler.get_tv_requests",
+            "README should cross-reference the tv request implementation",
+        ),
+        (
+            "`tv_episodes` is a list of episode objects containing `episode_number` and `episode_name`",
+            "README should describe the tv episode entries",
+        ),
+        (
+            "`tv_season` is formatted as",
+            "README should explain the tv season formatting",
+        ),
+        (
+            "TV request example",
+            "README should provide a sample tv request payload",
+        ),
+    )
+
+    assert_snippets(required_snippets)
+
+
 def test_readme_tools_section_uses_server_identifiers() -> None:
     contents = _read_readme_contents()
 

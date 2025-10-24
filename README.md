@@ -14,6 +14,63 @@ The server implements multiple tools to interact with Overseerr:
 - overseerr_get_movie_requests: Get the list of all movie requests that satisfies the filter arguments
 - overseerr_get_tv_requests: Get the list of all TV show requests that satisfies the filter arguments
 
+#### overseerr_movie_requests response structure
+
+The JSON payload returned by `overseerr_movie_requests` is built by
+[`MovieRequestsToolHandler.get_movie_requests`](src/overseerr_mcp/tools.py)
+and always uses the following fields:
+
+- `title`: Human readable movie name resolved from Overseerr.
+- `media_availability` values: `UNKNOWN`, `PENDING`, `PROCESSING`, `PARTIALLY_AVAILABLE`, `AVAILABLE`.
+- `request_date` (ISO 8601 creation timestamp from Overseerr).
+
+Movie request example:
+
+```json
+[
+  {
+    "title": "Dune",
+    "media_availability": "PENDING",
+    "request_date": "2024-05-01T12:34:56.000Z"
+  }
+]
+```
+
+#### overseerr_tv_requests response structure
+
+The JSON payload returned by `overseerr_tv_requests` is created via
+[`TvRequestsToolHandler.get_tv_requests`](src/overseerr_mcp/tools.py) and exposes:
+
+- `tv_title`: Human readable series name.
+- `tv_title_availability` and `tv_season_availability` share the same status options as movie requests (`UNKNOWN`, `PENDING`, `PROCESSING`, `PARTIALLY_AVAILABLE`, `AVAILABLE`).
+- `tv_season` is formatted as `SXX` to mirror Overseerr numbering.
+- `tv_episodes` is a list of episode objects containing `episode_number` and `episode_name`.
+- `request_date` (ISO 8601 creation timestamp from Overseerr).
+
+TV request example:
+
+```json
+[
+  {
+    "tv_title": "Avatar: The Last Airbender",
+    "tv_title_availability": "AVAILABLE",
+    "tv_season": "S01",
+    "tv_season_availability": "AVAILABLE",
+    "tv_episodes": [
+      {
+        "episode_number": "01",
+        "episode_name": "The Boy in the Iceberg"
+      },
+      {
+        "episode_number": "02",
+        "episode_name": "The Avatar Returns"
+      }
+    ],
+    "request_date": "2024-03-14T09:21:00.000Z"
+  }
+]
+```
+
 ### Example prompts
 
 It's good to first instruct Claude to use Overseerr. Then it will always call the tool when appropriate.
