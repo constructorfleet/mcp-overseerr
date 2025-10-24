@@ -10,6 +10,7 @@ import json
 import os
 from pydantic import BaseModel
 from . import overseerr
+from .client import create_overseerr_apis
 from .models import MediaRequestsFilter, MediaStatus, StatusToolInput, TvRequestsFilter
 
 # Constants for tool names
@@ -145,71 +146,60 @@ class MovieRequestsToolHandler(ToolHandler):
         status: MediaStatus | None = None,
         start_date: datetime | None = None,
     ):
-        client = overseerr.Overseerr(api_key=api_key, url=url)
+        requests_api, movies_api, _ = await create_overseerr_apis(api_key=api_key, url=url)
 
         normalized_start_date = _normalize_to_utc(start_date)
 
-        # Initialize pagination parameters
-        take = 20  # Number of items per page
-        skip = 0   # Starting offset
+        take = 20
+        skip = 0
         has_more = True
+        status_filter = getattr(status, "value", status) if status else None
 
-        all_results = []
-        
-        # Process all pages
+        results: list[dict[str, object]] = []
+
         while has_more:
-            # Prepare params
-            params = {
-                "take": take,
-                "skip": skip
-            }
-            
-            # Add filter if specified
-            if status:
-                status_value = getattr(status, "value", status)
-                params["filter"] = status_value
+            page = await requests_api.list(take=take, skip=skip, filter=status_filter)
 
-            # Call API
-            response = await client.get_requests(params)
-            
-            # Process results
-            results = response.get("results", [])
-            
-            for result in results:
-                # Only process if it's a movie (no tvdbId)
-                media_info = result.get("media", {})
-                if media_info and not media_info.get("tvdbId"):
-                    # Check if request date matches the filter if provided
-                    created_at = result.get("createdAt", "")
-                    created_at_dt = _normalize_to_utc(_parse_datetime(created_at))
-                    if normalized_start_date and created_at_dt and normalized_start_date > created_at_dt:
-                        continue
-                    
-                    # Get movie details to get the title
-                    movie_id = media_info.get("tmdbId")
-                    movie_details = await client.get_movie_details(movie_id)
-                    
-                    # Map media availability to string value
-                    media_status_code = media_info.get("status", 1)
-                    media_availability = MEDIA_STATUS_MAPPING.get(media_status_code, "UNKNOWN")
-                    
-                    # Create formatted result
-                    formatted_result = {
-                        "title": movie_details.get("title", "Unknown Movie"),
+            for result in page.results:
+                media_info = result.media
+                if not media_info or media_info.tvdbId:
+                    continue
+
+                created_at = result.createdAt
+                created_at_dt = _normalize_to_utc(_parse_datetime(created_at))
+                if (
+                    normalized_start_date
+                    and created_at_dt
+                    and normalized_start_date > created_at_dt
+                ):
+                    continue
+
+                movie_id = media_info.tmdbId
+                if movie_id is None:
+                    continue
+
+                movie_details = await movies_api.get(movie_id)
+
+                media_status_code = media_info.status or 1
+                media_availability = MEDIA_STATUS_MAPPING.get(
+                    media_status_code, "UNKNOWN"
+                )
+
+                results.append(
+                    {
+                        "title": movie_details.title or "Unknown Movie",
                         "media_availability": media_availability,
-                        "request_date": created_at
+                        "request_date": created_at,
                     }
-                    
-                    all_results.append(formatted_result)
-            
-            # Check if there are more pages
-            page_info = response.get("pageInfo", {})
-            if page_info.get("pages", 0) <= (skip // take) + 1:
+                )
+
+            total_pages = getattr(page.pageInfo, "pages", 0)
+            if total_pages <= (skip // take) + 1:
                 has_more = False
             else:
                 skip += take
-        
-        return all_results
+
+        return results
 
 class TvRequestsToolHandler(ToolHandler):
     def __init__(self):
@@ -238,102 +228,79 @@ class TvRequestsToolHandler(ToolHandler):
         status: MediaStatus | None = None,
         start_date: datetime | None = None,
     ):
-        client = overseerr.Overseerr(api_key=api_key, url=url)
+        requests_api, _, series_api = await create_overseerr_apis(
+            api_key=api_key, url=url
+        )
 
         normalized_start_date = _normalize_to_utc(start_date)
 
-        # Initialize pagination parameters
-        take = 20  # Number of items per page
-        skip = 0   # Starting offset
+        take = 20
+        skip = 0
         has_more = True
-        
-        all_results = []
-        
-        # Process all pages
+        status_filter = getattr(status, "value", status) if status else None
+
+        results: list[dict[str, object]] = []
+
         while has_more:
-            # Prepare params
-            params = {
-                "take": take,
-                "skip": skip
-            }
-            
-            # Add filter if specified
-            if status:
-                status_value = getattr(status, "value", status)
-                params["filter"] = status_value
-            
-            # Call API
-            response = await client.get_requests(params)
-            
-            # Process results
-            results = response.get("results", [])
-            
-            for result in results:
-                # Only process if it's a TV show (has tvdbId)
-                media_info = result.get("media", {})
-                if media_info and media_info.get("tvdbId"):
-                    # Check if request date matches the filter if provided
-                    created_at = result.get("createdAt", "")
-                    created_at_dt = _normalize_to_utc(_parse_datetime(created_at))
-                    if normalized_start_date and created_at_dt and normalized_start_date > created_at_dt:
+            page = await requests_api.list(take=take, skip=skip, filter=status_filter)
+
+            for result in page.results:
+                media_info = result.media
+                if not media_info or not media_info.tvdbId:
+                    continue
+
+                created_at = result.createdAt
+                created_at_dt = _normalize_to_utc(_parse_datetime(created_at))
+                if (
+                    normalized_start_date
+                    and created_at_dt
+                    and normalized_start_date > created_at_dt
+                ):
+                    continue
+
+                tv_id = media_info.tmdbId
+                if tv_id is None:
+                    continue
+
+                tv_details = await series_api.get(tv_id)
+
+                media_status_code = media_info.status or 1
+                tv_title_availability = MEDIA_STATUS_MAPPING.get(
+                    media_status_code, "UNKNOWN"
+                )
+
+                for season in tv_details.seasons:
+                    season_number = season.seasonNumber
+                    if season_number == 0:
                         continue
-                    
-                    # Get TV details to get the title and seasons
-                    tv_id = media_info.get("tmdbId")
-                    tv_details = await client.get_tv_details(tv_id)
-                    
-                    # Map media availability to string value
-                    media_status_code = media_info.get("status", 1)
-                    tv_title_availability = MEDIA_STATUS_MAPPING.get(media_status_code, "UNKNOWN")
-                    
-                    # Get seasons information
-                    seasons = tv_details.get("seasons", [])
-                    
-                    # For each season, get more detailed info including episodes
-                    for season in seasons:
-                        season_number = season.get("seasonNumber", 0)
-                        
-                        # Skip if it's a special season (season 0)
-                        if season_number == 0:
-                            continue
-                        
-                        # Format season string (e.g., S01)
-                        season_str = f"S{season_number:02d}"
-                        
-                        # Get detailed season info including episodes
-                        season_details = await client.get_season_details(tv_id, season_number)
-                        
-                        # Season availability is assumed to be the same as the show
-                        tv_season_availability = tv_title_availability
-                        
-                        # Process episodes
-                        episodes = season_details.get("episodes", [])
-                        episode_details = []
-                        
-                        for episode in episodes:
-                            episode_number = episode.get("episodeNumber", 0)
-                            episode_details.append({
+
+                    season_details = await series_api.get_season(tv_id, season_number)
+
+                    episode_details = []
+                    for episode in season_details.episodes:
+                        episode_number = episode.episodeNumber
+                        episode_details.append(
+                            {
                                 "episode_number": f"{episode_number:02d}",
-                                "episode_name": episode.get("name", f"Episode {episode_number}")
-                            })
-                        
-                        # Create formatted result for this season
-                        formatted_result = {
-                            "tv_title": tv_details.get("name", "Unknown TV Show"),
+                                "episode_name": episode.name,
+                            }
+                        )
+
+                    results.append(
+                        {
+                            "tv_title": tv_details.name or "Unknown TV Show",
                             "tv_title_availability": tv_title_availability,
-                            "tv_season": season_str,
-                            "tv_season_availability": tv_season_availability,
+                            "tv_season": f"S{season_number:02d}",
+                            "tv_season_availability": tv_title_availability,
                             "tv_episodes": episode_details,
-                            "request_date": created_at
+                            "request_date": created_at,
                         }
+                    )
 
-                        all_results.append(formatted_result)
-
-            # Check if there are more pages
-            page_info = response.get("pageInfo", {})
-            if page_info.get("pages", 0) <= (skip // take) + 1:
+            total_pages = getattr(page.pageInfo, "pages", 0)
+            if total_pages <= (skip // take) + 1:
                 has_more = False
             else:
                 skip += take
 
-        return all_results
+        return results
