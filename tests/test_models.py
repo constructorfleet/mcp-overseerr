@@ -1,5 +1,14 @@
+from datetime import datetime
+import os
+from pathlib import Path
 from types import NoneType, UnionType
 from typing import get_args, get_origin
+import sys
+
+sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
+
+os.environ.setdefault("OVERSEERR_API_KEY", "test")
+os.environ.setdefault("OVERSEERR_URL", "http://localhost")
 
 
 def test_status_tool_input_has_no_fields():
@@ -52,5 +61,5 @@ def test_media_filters_expose_expected_field_metadata():
         start_args = get_args(start_annotation)
 
         assert start_origin is UnionType
-        assert str in start_args
+        assert datetime in start_args
         assert NoneType in start_args

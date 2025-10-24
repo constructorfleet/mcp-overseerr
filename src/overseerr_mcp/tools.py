@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from datetime import datetime
 from mcp.types import (
     Tool,
     TextContent,
@@ -7,8 +8,9 @@ from mcp.types import (
 )
 import json
 import os
+from pydantic import BaseModel
 from . import overseerr
-from .models import MediaRequestsFilter, StatusToolInput, TvRequestsFilter
+from .models import MediaRequestsFilter, MediaStatus, StatusToolInput, TvRequestsFilter
 
 # Constants for tool names
 TOOL_GET_STATUS = "overseerr_status"
@@ -31,9 +33,32 @@ MEDIA_STATUS_MAPPING = {
     5: "AVAILABLE"
 }
 
+def _parse_datetime(value: str) -> datetime | None:
+    if not value:
+        return None
+
+    try:
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 class ToolHandler():
-    def __init__(self, tool_name: str):
+    def __init__(self, tool_name: str, input_model: type[BaseModel] | None = None):
         self.name = tool_name
+        self.input_model = input_model
+
+    def _get_input_schema(self) -> dict:
+        if not self.input_model:
+            return {"type": "object", "properties": {}}
+        return self.input_model.model_json_schema()
+
+    def _validate_args(self, args: dict) -> dict:
+        if not self.input_model:
+            return {}
+        return self.input_model.model_validate(args).model_dump()
 
     def get_tool_description(self) -> Tool:
         raise NotImplementedError()
@@ -43,13 +68,13 @@ class ToolHandler():
 
 class StatusToolHandler(ToolHandler):
     def __init__(self):
-        super().__init__(TOOL_GET_STATUS)
+        super().__init__(TOOL_GET_STATUS, StatusToolInput)
 
     def get_tool_description(self):
         return Tool(
             name=self.name,
             description="Get the status of the Overseerr server.",
-            inputSchema=StatusToolInput.model_json_schema(),
+            inputSchema=self._get_input_schema(),
         )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
@@ -73,22 +98,20 @@ class StatusToolHandler(ToolHandler):
 
 class MovieRequestsToolHandler(ToolHandler):
     def __init__(self):
-        super().__init__(TOOL_GET_MOVIE_REQUESTS)
+        super().__init__(TOOL_GET_MOVIE_REQUESTS, MediaRequestsFilter)
 
     def get_tool_description(self):
         return Tool(
             name=self.name,
             description="Get the list of all movie requests that satisfies the filter arguments.",
-            inputSchema=MediaRequestsFilter.model_json_schema(),
+            inputSchema=self._get_input_schema(),
         )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
-        # Extract arguments
-        status = args.get("status")
-        start_date = args.get("start_date")
-        
+        filters = self._validate_args(args)
+
         # Now using asynchronous approach
-        results = await self.get_movie_requests(status, start_date)
+        results = await self.get_movie_requests(**filters)
         
         return [
             TextContent(
@@ -97,19 +120,18 @@ class MovieRequestsToolHandler(ToolHandler):
             )
         ]
         
-    async def get_movie_requests(self, status=None, start_date=None):
+    async def get_movie_requests(
+        self,
+        status: MediaStatus | None = None,
+        start_date: datetime | None = None,
+    ):
         client = overseerr.Overseerr(api_key=api_key, url=url)
-        
-        # Parameter validation
-        valid_statuses = ["all", "approved", "available", "pending", "processing", "unavailable", "failed"]
-        if status and status not in valid_statuses:
-            status = None
-            
+
         # Initialize pagination parameters
         take = 20  # Number of items per page
         skip = 0   # Starting offset
         has_more = True
-        
+
         all_results = []
         
         # Process all pages
@@ -122,8 +144,9 @@ class MovieRequestsToolHandler(ToolHandler):
             
             # Add filter if specified
             if status:
-                params["filter"] = status
-            
+                status_value = getattr(status, "value", status)
+                params["filter"] = status_value
+
             # Call API
             response = await client.get_requests(params)
             
@@ -136,7 +159,8 @@ class MovieRequestsToolHandler(ToolHandler):
                 if media_info and not media_info.get("tvdbId"):
                     # Check if request date matches the filter if provided
                     created_at = result.get("createdAt", "")
-                    if start_date and start_date > created_at:
+                    created_at_dt = _parse_datetime(created_at)
+                    if start_date and created_at_dt and start_date > created_at_dt:
                         continue
                     
                     # Get movie details to get the title
@@ -167,22 +191,20 @@ class MovieRequestsToolHandler(ToolHandler):
 
 class TvRequestsToolHandler(ToolHandler):
     def __init__(self):
-        super().__init__(TOOL_GET_TV_REQUESTS)
+        super().__init__(TOOL_GET_TV_REQUESTS, TvRequestsFilter)
 
     def get_tool_description(self):
         return Tool(
             name=self.name,
             description="Get the list of all TV requests that satisfies the filter arguments.",
-            inputSchema=TvRequestsFilter.model_json_schema(),
+            inputSchema=self._get_input_schema(),
         )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
-        # Extract arguments
-        status = args.get("status")
-        start_date = args.get("start_date")
-        
+        filters = self._validate_args(args)
+
         # Now using asynchronous approach
-        results = await self.get_tv_requests(status, start_date)
+        results = await self.get_tv_requests(**filters)
         
         return [
             TextContent(
@@ -191,14 +213,13 @@ class TvRequestsToolHandler(ToolHandler):
             )
         ]
         
-    async def get_tv_requests(self, status=None, start_date=None):
+    async def get_tv_requests(
+        self,
+        status: MediaStatus | None = None,
+        start_date: datetime | None = None,
+    ):
         client = overseerr.Overseerr(api_key=api_key, url=url)
-        
-        # Parameter validation
-        valid_statuses = ["all", "approved", "available", "pending", "processing", "unavailable", "failed"]
-        if status and status not in valid_statuses:
-            status = None
-            
+
         # Initialize pagination parameters
         take = 20  # Number of items per page
         skip = 0   # Starting offset
@@ -216,7 +237,8 @@ class TvRequestsToolHandler(ToolHandler):
             
             # Add filter if specified
             if status:
-                params["filter"] = status
+                status_value = getattr(status, "value", status)
+                params["filter"] = status_value
             
             # Call API
             response = await client.get_requests(params)
@@ -230,7 +252,8 @@ class TvRequestsToolHandler(ToolHandler):
                 if media_info and media_info.get("tvdbId"):
                     # Check if request date matches the filter if provided
                     created_at = result.get("createdAt", "")
-                    if start_date and start_date > created_at:
+                    created_at_dt = _parse_datetime(created_at)
+                    if start_date and created_at_dt and start_date > created_at_dt:
                         continue
                     
                     # Get TV details to get the title and seasons
@@ -281,14 +304,14 @@ class TvRequestsToolHandler(ToolHandler):
                             "tv_episodes": episode_details,
                             "request_date": created_at
                         }
-                        
+
                         all_results.append(formatted_result)
-            
+
             # Check if there are more pages
             page_info = response.get("pageInfo", {})
             if page_info.get("pages", 0) <= (skip // take) + 1:
                 has_more = False
             else:
                 skip += take
-        
+
         return all_results
