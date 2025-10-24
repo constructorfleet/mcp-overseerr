@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
 from pydantic import BaseModel, Field
 
@@ -33,7 +34,7 @@ class MediaRequestsFilter(BaseModel):
         default=None,
         description="Filter by media availability status.",
     )
-    start_date: str | None = Field(
+    start_date: datetime | None = Field(
         default=None,
         description="Filter for the date of request, formatted as '2020-09-12T10:00:27.000Z'",
     )
@@ -50,7 +51,7 @@ class TvRequestsFilter(BaseModel):
         default=None,
         description="Filter by media availability status.",
     )
-    start_date: str | None = Field(
+    start_date: datetime | None = Field(
         default=None,
         description="Filter for the date of request, formatted as '2020-09-12T10:00:27.000Z'",
     )
