@@ -375,6 +375,15 @@ wheels = [
 ]
 
 [[package]]
+name = "lazy-imports"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e2/1c/6675601691fd6007021e8e95cfcb83e6d11067de3d7ecde0d0de970324c8/lazy_imports-1.0.1.tar.gz", hash = "sha256:7d3e4b1547cb574ec7ef3c47a074673e2612330b2b50bf7eec939f2c393fc261", size = 24484, upload-time = "2025-08-09T07:15:55.353Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/37/c84d7fec58dec38564574dec8f94bb1db788598fe397f116a9d6a86d3055/lazy_imports-1.0.1-py3-none-any.whl", hash = "sha256:eb5accc33bf9987e5197e79476bbeb960b74a2c16619bdf41281b3240f730846", size = 18896, upload-time = "2025-08-09T07:15:53.7Z" },
+]
+
+[[package]]
 name = "lazy-object-proxy"
 version = "1.11.0"
 source = { registry = "https://pypi.org/simple" }
@@ -547,13 +556,29 @@ wheels = [
 ]
 
 [[package]]
+name = "overseerr"
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "lazy-imports" },
+    { name = "pydantic" },
+    { name = "python-dateutil" },
+    { name = "typing-extensions" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/60/09e624a853f7b1109e33ad2f77479ed07d92f9fc5bc823293e46f74451e4/overseerr-1.0.2.tar.gz", hash = "sha256:faea5a406521111e3773d13eac55c5f5b4dacda0530dee52cde34a41d7f43931", size = 137644, upload-time = "2025-09-13T07:05:42.67Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/79/e9/f92e3f42ba861906cc682bdfa7c9ddadc08605fcf5272f6d71e97610fdfd/overseerr-1.0.2-py3-none-any.whl", hash = "sha256:a7a98b49c7ee5c13921a39cb3520570c7238b9c051f1e98c0f6eee557b37edff", size = 379674, upload-time = "2025-09-13T07:05:40.777Z" },
+]
+
+[[package]]
 name = "overseerr-mcp"
 version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
-    { name = "httpx" },
     { name = "mcp", extra = ["cli"] },
+    { name = "overseerr" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "requests" },
@@ -564,9 +589,8 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastmcp", specifier = ">2.10" },
-    { name = "httpx" },
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.6.0" },
+    { name = "overseerr", specifier = ">=1.0.2" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "requests", specifier = ">=2.32.3" },
@@ -690,6 +714,18 @@ name = "pyperclip"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/30/23/2f0a3efc4d6a32f3b63cdff36cd398d9701d26cda58e3ab97ac79fb5e60d/pyperclip-1.9.0.tar.gz", hash = "sha256:b7de0142ddc81bfc5c7507eea19da920b92252b548b96186caf94a5e2527d310", size = 20961, upload-time = "2024-06-18T20:38:48.401Z" }
+
+[[package]]
+name = "python-dateutil"
+version = "2.9.0.post0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
+]
 
 [[package]]
 name = "python-dotenv"
