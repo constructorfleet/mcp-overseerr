@@ -101,6 +101,44 @@ On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
 
 **Note: This MCP server is not yet published. Currently, only the development configuration is available.**
 
+### Run
+
+Set the required environment variables before starting the server:
+
+```bash
+export OVERSEERR_API_KEY="<your_api_key_here>"
+export OVERSEERR_URL="https://your-overseerr.example.com"
+```
+
+#### Published package
+
+```bash
+uvx overseerr-mcp
+```
+
+#### Run from this repository
+
+```bash
+uv run overseerr-mcp
+```
+
+You can also define the variables in a `.env` file in the project root if you prefer not to export them in your shell.
+
+**Example invocation**
+
+```bash
+OVERSEERR_API_KEY=demo OVERSEERR_URL=https://overseerr.example.com uv run overseerr-mcp
+```
+
+You should see log lines similar to the following when the server has started successfully:
+
+```text
+[2025-10-24 07:58:52] INFO     Starting MCP server 'Overseerr Media Request Handler' with transport 'http' on http://0.0.0.0:8000/mcp
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Server started successfully.
+```
+
 ## Development
 
 ### Building
