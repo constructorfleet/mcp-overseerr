@@ -14,17 +14,24 @@ The server implements multiple tools to interact with Overseerr:
 - overseerr_get_movie_requests: Get the list of all movie requests that satisfies the filter arguments
 - overseerr_get_tv_requests: Get the list of all TV show requests that satisfies the filter arguments
 
-#### overseerr_movie_requests response structure
+### Tool reference
 
-The JSON payload returned by `overseerr_movie_requests` is built by
-[`MovieRequestsToolHandler.get_movie_requests`](src/overseerr_mcp/tools.py)
-and always uses the following fields:
+See [openapi.yaml](openapi.yaml) for the full schema.
 
-- `title`: Human readable movie name resolved from Overseerr.
-- `media_availability` values: `UNKNOWN`, `PENDING`, `PROCESSING`, `PARTIALLY_AVAILABLE`, `AVAILABLE`.
-- `request_date` (ISO 8601 creation timestamp from Overseerr).
+#### overseerr_get_status
 
-Movie request example:
+- **Arguments:** none — this tool just checks the Overseerr deployment health.
+- **Response:** Markdown text summarizing Overseerr status fields such as version, database, and queue states.
+- If Overseerr returns an error, the response starts with "Overseerr is not available" and includes the returned error payload as bullet items.
+
+#### overseerr_get_movie_requests
+
+- **Arguments:**
+  - `status` (optional): Filter requests by Overseerr state (`all`, `approved`, `available`, `pending`, `processing`, `unavailable`, `failed`).
+  - `start_date` (optional): ISO 8601 timestamp such as `2024-01-15T00:00:00Z`.
+- Response: JSON array of movie request objects with `title`, `media_availability`, and `request_date` fields. Each field mirrors Overseerr's data model with normalized availability states.
+
+Movie requests success example:
 
 ```json
 [
@@ -36,18 +43,24 @@ Movie request example:
 ]
 ```
 
-#### overseerr_tv_requests response structure
+#### overseerr_movie_requests response structure
 
-The JSON payload returned by `overseerr_tv_requests` is created via
-[`TvRequestsToolHandler.get_tv_requests`](src/overseerr_mcp/tools.py) and exposes:
+The JSON payload returned by `overseerr_movie_requests` is built by
+[`MovieRequestsToolHandler.get_movie_requests`](src/overseerr_mcp/tools.py)
+and always uses the following fields:
 
-- `tv_title`: Human readable series name.
-- `tv_title_availability` and `tv_season_availability` share the same status options as movie requests (`UNKNOWN`, `PENDING`, `PROCESSING`, `PARTIALLY_AVAILABLE`, `AVAILABLE`).
-- `tv_season` is formatted as `SXX` to mirror Overseerr numbering.
-- `tv_episodes` is a list of episode objects containing `episode_number` and `episode_name`.
+- `title`: Human readable movie name resolved from Overseerr.
+- `media_availability` values: `UNKNOWN`, `PENDING`, `PROCESSING`, `PARTIALLY_AVAILABLE`, `AVAILABLE`.
 - `request_date` (ISO 8601 creation timestamp from Overseerr).
 
-TV request example:
+#### overseerr_get_tv_requests
+
+- **Arguments:**
+  - `status` (optional): Filter requests by Overseerr state (`all`, `approved`, `available`, `pending`, `processing`, `unavailable`, `failed`).
+  - `start_date` (optional): ISO 8601 timestamp such as `2024-01-15T00:00:00Z`.
+- Response: JSON array of TV request objects with `tv_title`, `tv_title_availability`, `tv_season`, `tv_season_availability`, `tv_episodes`, and `request_date` fields.
+
+TV requests success example:
 
 ```json
 [
@@ -70,6 +83,17 @@ TV request example:
   }
 ]
 ```
+
+#### overseerr_tv_requests response structure
+
+The JSON payload returned by `overseerr_tv_requests` is created via
+[`TvRequestsToolHandler.get_tv_requests`](src/overseerr_mcp/tools.py) and exposes:
+
+- `tv_title`: Human readable series name.
+- `tv_title_availability` and `tv_season_availability` share the same status options as movie requests (`UNKNOWN`, `PENDING`, `PROCESSING`, `PARTIALLY_AVAILABLE`, `AVAILABLE`).
+- `tv_season` is formatted as `SXX` to mirror Overseerr numbering.
+- `tv_episodes` is a list of episode objects containing `episode_number` and `episode_name`.
+- `request_date` (ISO 8601 creation timestamp from Overseerr).
 
 ### Example prompts
 
