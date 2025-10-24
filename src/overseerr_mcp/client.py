@@ -1,141 +1,50 @@
-"""Wrappers around the Overseerr API with lightweight models."""
+"""Async wrappers around the official Overseerr Python SDK."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Sequence
+import asyncio
+from typing import Any
 
-from . import overseerr
-
-
-@dataclass
-class PageInfo:
-    pages: int
+import overseerr
 
 
-@dataclass
-class Media:
-    tmdbId: int | None
-    status: int | None
-    tvdbId: int | None = None
+class OverseerrApis:
+    """Facade exposing async accessors backed by the Overseerr SDK."""
 
+    def __init__(self, *, base_url: str, api_key: str) -> None:
+        self._config = overseerr.Configuration()
+        sanitized_url = base_url.rstrip("/")
+        self._config.host = f"{sanitized_url}/api/v1"
+        self._config.api_key["apiKey"] = api_key
 
-@dataclass
-class Request:
-    media: Media
-    createdAt: str
+        self._client = overseerr.ApiClient(self._config)
+        self._public_api = overseerr.PublicApi(self._client)
+        self._request_api = overseerr.RequestApi(self._client)
+        self._movies_api = overseerr.MoviesApi(self._client)
+        self._tv_api = overseerr.TvApi(self._client)
 
+    async def get_status(self) -> Any:
+        return await asyncio.to_thread(self._public_api.get_status)
 
-@dataclass
-class Page:
-    results: Sequence[Request]
-    pageInfo: PageInfo
+    async def get_requests(
+        self, *, take: int, skip: int, filter: str | None = None
+    ) -> Any:
+        return await asyncio.to_thread(
+            self._request_api.get_request, take=take, skip=skip, filter=filter
+        )
 
+    async def get_movie_by_movie_id(self, movie_id: int) -> Any:
+        return await asyncio.to_thread(
+            self._movies_api.get_movie_by_movie_id, movie_id
+        )
 
-@dataclass
-class MovieDetails:
-    title: str
+    async def get_tv_by_tv_id(self, tv_id: int) -> Any:
+        return await asyncio.to_thread(self._tv_api.get_tv_by_tv_id, tv_id)
 
+    async def get_tv_season_by_season_id(self, tv_id: int, season_id: int) -> Any:
+        return await asyncio.to_thread(
+            self._tv_api.get_tv_season_by_season_id, tv_id, season_id
+        )
 
-@dataclass
-class Season:
-    seasonNumber: int
-
-
-@dataclass
-class Episode:
-    episodeNumber: int
-    name: str
-
-
-@dataclass
-class SeasonDetails:
-    episodes: Sequence[Episode]
-
-
-@dataclass
-class TvDetails:
-    name: str
-    seasons: Sequence[Season]
-
-
-class RequestsApi:
-    """Wrapper for request listings."""
-
-    def __init__(self, client: overseerr.Overseerr):
-        self._client = client
-
-    async def list(self, *, take: int, skip: int, filter: str | None = None) -> Page:
-        params: dict[str, int | str] = {"take": take, "skip": skip}
-        if filter:
-            params["filter"] = filter
-
-        data = await self._client.get_requests(params)
-
-        results: list[Request] = []
-        for item in data.get("results", []):
-            media_data = item.get("media") or {}
-            results.append(
-                Request(
-                    media=Media(
-                        tmdbId=media_data.get("tmdbId"),
-                        status=media_data.get("status"),
-                        tvdbId=media_data.get("tvdbId"),
-                    ),
-                    createdAt=item.get("createdAt", ""),
-                )
-            )
-
-        page_info = data.get("pageInfo") or {}
-        return Page(results=results, pageInfo=PageInfo(pages=page_info.get("pages", 0)))
-
-
-class MoviesApi:
-    """Wrapper for movie specific endpoints."""
-
-    def __init__(self, client: overseerr.Overseerr):
-        self._client = client
-
-    async def get(self, movie_id: int) -> MovieDetails:
-        data = await self._client.get_movie_details(movie_id)
-        return MovieDetails(title=data.get("title", ""))
-
-
-class SeriesApi:
-    """Wrapper for series specific endpoints."""
-
-    def __init__(self, client: overseerr.Overseerr):
-        self._client = client
-
-    async def get(self, show_id: int) -> TvDetails:
-        data = await self._client.get_tv_details(show_id)
-        seasons = [
-            Season(seasonNumber=season.get("seasonNumber", 0))
-            for season in data.get("seasons", [])
-        ]
-        return TvDetails(name=data.get("name", ""), seasons=seasons)
-
-    async def get_season(self, show_id: int, season_number: int) -> SeasonDetails:
-        data = await self._client.get_season_details(show_id, season_number)
-        episodes = [
-            Episode(
-                episodeNumber=episode.get("episodeNumber", 0),
-                name=episode.get("name", f"Episode {episode.get('episodeNumber', 0)}"),
-            )
-            for episode in data.get("episodes", [])
-        ]
-        return SeasonDetails(episodes=episodes)
-
-
-async def create_overseerr_apis(
-    *, api_key: str, url: str, client: overseerr.Overseerr | None = None
-) -> tuple[RequestsApi, MoviesApi, SeriesApi]:
-    """Factory returning wrappers for the Overseerr API."""
-
-    overseerr_client = client or overseerr.Overseerr(api_key=api_key, url=url)
-    return (
-        RequestsApi(overseerr_client),
-        MoviesApi(overseerr_client),
-        SeriesApi(overseerr_client),
-    )
-
+    async def aclose(self) -> None:
+        await asyncio.to_thread(self._client.close)

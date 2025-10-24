@@ -112,6 +112,15 @@ To prepare the package for distribution:
 uv sync
 ```
 
+### Testing
+
+Set up a uv-managed virtual environment and run the test suite with pytest:
+
+```bash
+uv venv
+uv run python -m pytest
+```
+
 ### Debugging
 
 Since MCP servers run over stdio, debugging can be challenging. For the best debugging
