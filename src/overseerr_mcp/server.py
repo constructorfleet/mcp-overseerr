@@ -17,6 +17,9 @@ from . import tools
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcp-overseerr")
 
+
+SERVER_NAME = "Overseerr Media Request Handler"
+
 # Check for required environment variables
 api_key = os.getenv("OVERSEERR_API_KEY")
 url = os.getenv("OVERSEERR_URL")
@@ -26,7 +29,7 @@ if not api_key or not url:
         f"OVERSEERR_API_KEY and OVERSEERR_URL environment variables are required. Working directory: {os.getcwd()}"
     )
 
-app = FastMCP("mcp-overseerr")
+app = FastMCP(SERVER_NAME)
 
 status_tool_handler = tools.StatusToolHandler()
 movie_requests_tool_handler = tools.MovieRequestsToolHandler()
