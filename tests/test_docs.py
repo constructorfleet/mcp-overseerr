@@ -1,11 +1,14 @@
 from pathlib import Path
 
 
-def test_readme_includes_uv_testing_instructions() -> None:
+def _read_readme() -> str:
     readme_path = Path("README.md")
     assert readme_path.exists(), "README.md must exist"
+    return readme_path.read_text(encoding="utf-8")
 
-    contents = readme_path.read_text(encoding="utf-8")
+
+def test_readme_includes_uv_testing_instructions() -> None:
+    contents = _read_readme()
 
     required_snippets = (
         ("uv venv", "README should instruct creating a uv virtual environment"),
@@ -17,3 +20,20 @@ def test_readme_includes_uv_testing_instructions() -> None:
 
     for snippet, message in required_snippets:
         assert snippet in contents, message
+
+
+def test_readme_tools_section_uses_server_identifiers() -> None:
+    contents = _read_readme()
+
+    tools_section_start = contents.index("### Tools")
+    tools_section_end = contents.index("### Example prompts", tools_section_start)
+    tools_section = contents[tools_section_start:tools_section_end]
+
+    expected_identifiers = {
+        "- overseerr_get_status: Get the status of the Overseerr server",
+        "- overseerr_get_movie_requests: Get the list of all movie requests that satisfies the filter arguments",
+        "- overseerr_get_tv_requests: Get the list of all TV show requests that satisfies the filter arguments",
+    }
+
+    for line in expected_identifiers:
+        assert line in tools_section, f"README Tools entry missing or mismatched: {line}"
