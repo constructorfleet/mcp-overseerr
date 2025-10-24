@@ -8,6 +8,7 @@ from mcp.types import (
 import json
 import os
 from . import overseerr
+from .models import MediaRequestsFilter, StatusToolInput, TvRequestsFilter
 
 # Constants for tool names
 TOOL_GET_STATUS = "overseerr_status"
@@ -48,11 +49,7 @@ class StatusToolHandler(ToolHandler):
         return Tool(
             name=self.name,
             description="Get the status of the Overseerr server.",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-                "required": []
-            },
+            inputSchema=StatusToolInput.model_json_schema(),
         )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
@@ -82,20 +79,7 @@ class MovieRequestsToolHandler(ToolHandler):
         return Tool(
             name=self.name,
             description="Get the list of all movie requests that satisfies the filter arguments.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "status": {
-                        "type": "string",
-                        "description": "Filter by media availability status.",
-                        "enum": ["all", "approved", "available", "pending", "processing", "unavailable", "failed"]
-                    },
-                    "start_date": {
-                        "type": "string",
-                        "description": "Filter for the date of request, formatted as '2020-09-12T10:00:27.000Z'"
-                    }
-                }
-            },
+            inputSchema=MediaRequestsFilter.model_json_schema(),
         )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
@@ -189,20 +173,7 @@ class TvRequestsToolHandler(ToolHandler):
         return Tool(
             name=self.name,
             description="Get the list of all TV requests that satisfies the filter arguments.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "status": {
-                        "type": "string",
-                        "description": "Filter by media availability status.",
-                        "enum": ["all", "approved", "available", "pending", "processing", "unavailable", "failed"]
-                    },
-                    "start_date": {
-                        "type": "string",
-                        "description": "Filter for the date of request, formatted as '2020-09-12T10:00:27.000Z'"
-                    }
-                }
-            },
+            inputSchema=TvRequestsFilter.model_json_schema(),
         )
 
     async def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:

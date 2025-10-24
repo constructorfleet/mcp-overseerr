@@ -25,6 +25,8 @@ dependencies = [
     "fastmcp>2.10",
     "httpx",
     "uvicorn",
+    "pydantic>=2.0",
+    "typing-extensions>=4.8",
 ]
 
 [project.scripts]
