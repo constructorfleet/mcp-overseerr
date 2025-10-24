@@ -146,6 +146,196 @@ def test_tv_handler_validates_arguments_with_input_model(monkeypatch):
     assert handler.input_model is TvRequestsFilter
 
 
+def test_tv_requests_excludes_entries_before_start_date():
+    start_date = datetime(2020, 9, 12, 0, 0, tzinfo=timezone.utc)
+
+    def make_request(request_id: int, *, tmdb_id: int, created_at: str):
+        return models.MediaRequest(
+            id=request_id,
+            status=3,
+            created_at=created_at,
+            media=models.MediaInfo(
+                tmdb_id=tmdb_id,
+                tvdb_id=tmdb_id,
+                status=3,
+            ),
+        )
+
+    class FakeOverseerrApis:
+        def __init__(self):
+            self.tv_calls: list[int] = []
+            self.season_calls: list[tuple[int, int]] = []
+
+        async def get_requests(self, *, take: int, skip: int, filter: str | None = None):
+            return models.GetUserRequests2XXResponse(
+                results=[
+                    make_request(1, tmdb_id=301, created_at="2020-09-10T05:00:00.000Z"),
+                    make_request(2, tmdb_id=302, created_at="2020-09-12T05:00:00.000Z"),
+                    make_request(3, tmdb_id=303, created_at="2020-09-15T05:00:00.000Z"),
+                ],
+                page_info=models.PageInfo(pages=1),
+            )
+
+        async def get_movie_by_movie_id(self, movie_id: int):
+            raise AssertionError("Movie API should not be called for TV requests")
+
+        async def get_tv_by_tv_id(self, tv_id: int):
+            self.tv_calls.append(tv_id)
+            return models.TvDetails(
+                name=f"Show {tv_id}",
+                seasons=[models.Season(season_number=1)],
+            )
+
+        async def get_tv_season_by_season_id(self, tv_id: int, season_number: int):
+            self.season_calls.append((tv_id, season_number))
+            return models.Season(
+                season_number=season_number,
+                episodes=[
+                    models.Episode(
+                        episode_number=1,
+                        name=f"Episode {tv_id}-{season_number}",
+                    )
+                ],
+            )
+
+        async def aclose(self):
+            return None
+
+    fake_client = FakeOverseerrApis()
+
+    handler = TvRequestsToolHandler(overseerr_factory=lambda: fake_client)
+
+    results = asyncio.run(
+        handler.get_tv_requests(
+            status=MediaStatus.processing,
+            start_date=start_date,
+        )
+    )
+
+    assert [result["request_date"] for result in results] == [
+        "2020-09-12T05:00:00.000Z",
+        "2020-09-15T05:00:00.000Z",
+    ]
+    assert fake_client.tv_calls == [302, 303]
+    assert fake_client.season_calls == [(302, 1), (303, 1)]
+    assert results == [
+        {
+            "tv_title": "Show 302",
+            "tv_title_availability": "PROCESSING",
+            "tv_season": "S01",
+            "tv_season_availability": "PROCESSING",
+            "tv_episodes": [
+                {"episode_number": "01", "episode_name": "Episode 302-1"}
+            ],
+            "request_date": "2020-09-12T05:00:00.000Z",
+        },
+        {
+            "tv_title": "Show 303",
+            "tv_title_availability": "PROCESSING",
+            "tv_season": "S01",
+            "tv_season_availability": "PROCESSING",
+            "tv_episodes": [
+                {"episode_number": "01", "episode_name": "Episode 303-1"}
+            ],
+            "request_date": "2020-09-15T05:00:00.000Z",
+        },
+    ]
+
+
+def test_tv_requests_returns_results_when_start_date_missing():
+    def make_request(request_id: int, *, tmdb_id: int, created_at: str):
+        return models.MediaRequest(
+            id=request_id,
+            status=3,
+            created_at=created_at,
+            media=models.MediaInfo(
+                tmdb_id=tmdb_id,
+                tvdb_id=tmdb_id,
+                status=3,
+            ),
+        )
+
+    class FakeOverseerrApis:
+        def __init__(self):
+            self.tv_calls: list[int] = []
+            self.season_calls: list[tuple[int, int]] = []
+
+        async def get_requests(self, *, take: int, skip: int, filter: str | None = None):
+            requests = [
+                make_request(1, tmdb_id=401, created_at="2020-09-10T05:00:00.000Z"),
+                make_request(2, tmdb_id=402, created_at="2020-09-12T05:00:00.000Z"),
+            ]
+
+            return models.GetUserRequests2XXResponse(
+                results=requests,
+                page_info=models.PageInfo(pages=1),
+            )
+
+        async def get_movie_by_movie_id(self, movie_id: int):
+            raise AssertionError("Movie API should not be called for TV requests")
+
+        async def get_tv_by_tv_id(self, tv_id: int):
+            self.tv_calls.append(tv_id)
+            return models.TvDetails(
+                name=f"Show {tv_id}",
+                seasons=[models.Season(season_number=1)],
+            )
+
+        async def get_tv_season_by_season_id(self, tv_id: int, season_number: int):
+            self.season_calls.append((tv_id, season_number))
+            return models.Season(
+                season_number=season_number,
+                episodes=[
+                    models.Episode(
+                        episode_number=1,
+                        name=f"Episode {tv_id}-{season_number}",
+                    )
+                ],
+            )
+
+        async def aclose(self):
+            return None
+
+    fake_client = FakeOverseerrApis()
+
+    handler = TvRequestsToolHandler(overseerr_factory=lambda: fake_client)
+
+    results = asyncio.run(
+        handler.get_tv_requests(
+            status=MediaStatus.processing,
+            start_date=None,
+        )
+    )
+
+    assert [result["request_date"] for result in results] == [
+        "2020-09-10T05:00:00.000Z",
+        "2020-09-12T05:00:00.000Z",
+    ]
+    assert fake_client.tv_calls == [401, 402]
+    assert fake_client.season_calls == [(401, 1), (402, 1)]
+    assert results == [
+        {
+            "tv_title": "Show 401",
+            "tv_title_availability": "PROCESSING",
+            "tv_season": "S01",
+            "tv_season_availability": "PROCESSING",
+            "tv_episodes": [
+                {"episode_number": "01", "episode_name": "Episode 401-1"}
+            ],
+            "request_date": "2020-09-10T05:00:00.000Z",
+        },
+        {
+            "tv_title": "Show 402",
+            "tv_title_availability": "PROCESSING",
+            "tv_season": "S01",
+            "tv_season_availability": "PROCESSING",
+            "tv_episodes": [
+                {"episode_number": "01", "episode_name": "Episode 402-1"}
+            ],
+            "request_date": "2020-09-12T05:00:00.000Z",
+        },
+    ]
+
 def test_tool_descriptions_include_expected_tags():
     tool_tags = {
         MovieRequestsToolHandler: {"overseerr", "movie", "requests"},
