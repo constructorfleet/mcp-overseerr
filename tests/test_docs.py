@@ -113,3 +113,37 @@ def test_readme_tools_section_uses_server_identifiers() -> None:
 
     for line in expected_identifiers:
         assert line in tools_section, f"README Tools entry missing or mismatched: {line}"
+
+
+def test_readme_documents_running_server_http_entrypoint() -> None:
+    required_snippets = (
+        (
+            "### Running the server",
+            "README should include a running section that follows Quickstart",
+        ),
+        (
+            "`overseerr_mcp.server.main()` launches the FastMCP app over HTTP",
+            "README should document the main entrypoint and FastMCP transport",
+        ),
+        (
+            "http://0.0.0.0:8000/mcp",
+            "README should mention the default HTTP endpoint",
+        ),
+        (
+            (
+                "override the default transport, host, or port by passing FastMCP's "
+                "`transport`, `host`, or `port` arguments"
+            ),
+            "README should explain how to adjust FastMCP networking parameters",
+        ),
+        (
+            "uv run overseerr-mcp",
+            "README should show the uv command for launching the server",
+        ),
+        (
+            "firewall or reverse proxy",
+            "README should mention networking considerations when exposing the endpoint",
+        ),
+    )
+
+    assert_snippets(required_snippets)
