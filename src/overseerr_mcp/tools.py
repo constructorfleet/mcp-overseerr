@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from mcp.types import (
     Tool,
     TextContent,
@@ -43,6 +43,16 @@ def _parse_datetime(value: str) -> datetime | None:
         return datetime.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _normalize_to_utc(dt: datetime | None) -> datetime | None:
+    if not dt:
+        return None
+
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+
+    return dt.astimezone(timezone.utc)
 
 
 class ToolHandler():
@@ -127,6 +137,8 @@ class MovieRequestsToolHandler(ToolHandler):
     ):
         client = overseerr.Overseerr(api_key=api_key, url=url)
 
+        normalized_start_date = _normalize_to_utc(start_date)
+
         # Initialize pagination parameters
         take = 20  # Number of items per page
         skip = 0   # Starting offset
@@ -159,8 +171,8 @@ class MovieRequestsToolHandler(ToolHandler):
                 if media_info and not media_info.get("tvdbId"):
                     # Check if request date matches the filter if provided
                     created_at = result.get("createdAt", "")
-                    created_at_dt = _parse_datetime(created_at)
-                    if start_date and created_at_dt and start_date > created_at_dt:
+                    created_at_dt = _normalize_to_utc(_parse_datetime(created_at))
+                    if normalized_start_date and created_at_dt and normalized_start_date > created_at_dt:
                         continue
                     
                     # Get movie details to get the title
@@ -220,6 +232,8 @@ class TvRequestsToolHandler(ToolHandler):
     ):
         client = overseerr.Overseerr(api_key=api_key, url=url)
 
+        normalized_start_date = _normalize_to_utc(start_date)
+
         # Initialize pagination parameters
         take = 20  # Number of items per page
         skip = 0   # Starting offset
@@ -252,8 +266,8 @@ class TvRequestsToolHandler(ToolHandler):
                 if media_info and media_info.get("tvdbId"):
                     # Check if request date matches the filter if provided
                     created_at = result.get("createdAt", "")
-                    created_at_dt = _parse_datetime(created_at)
-                    if start_date and created_at_dt and start_date > created_at_dt:
+                    created_at_dt = _normalize_to_utc(_parse_datetime(created_at))
+                    if normalized_start_date and created_at_dt and normalized_start_date > created_at_dt:
                         continue
                     
                     # Get TV details to get the title and seasons
