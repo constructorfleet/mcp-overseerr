@@ -1,9 +1,12 @@
-from . import server
+"""Overseerr MCP package exports."""
 
-def main():
-    """Entry point for the overseerr-mcp command.
-    """
+from . import models, server
+
+
+def main() -> None:
+    """Entry point for the overseerr-mcp command."""
+
     server.main()
 
-# Optionally expose other important items at package level
-__all__ = ['main', 'server']
+
+__all__ = ["main", "server", "models"]
