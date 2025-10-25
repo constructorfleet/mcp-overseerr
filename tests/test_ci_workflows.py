@@ -1,8 +1,11 @@
 from pathlib import Path
 
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
 def _read_workflow(name: str) -> str:
-    workflow_path = Path(".github/workflows") / name
+    workflow_path = REPO_ROOT / ".github/workflows" / name
     assert workflow_path.exists(), f"{name} workflow file is missing"
     return workflow_path.read_text()
 
@@ -19,3 +22,8 @@ def test_docker_publish_workflow_attests_ghcr_image():
     assert "ghcr.io/${{ github.repository }}" in contents, "image should target GHCR"
     assert "docker/build-push-action" in contents, "workflow should build docker image"
     assert "actions/attest-build-provenance" in contents, "workflow should attest build provenance"
+
+
+def test_docker_publish_workflow_has_build_context():
+    dockerfile_path = REPO_ROOT / "Dockerfile"
+    assert dockerfile_path.exists(), "docker publish workflow must have a Dockerfile to build"
